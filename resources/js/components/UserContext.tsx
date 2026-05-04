@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
 
 interface User {
     id: number;
@@ -31,9 +32,26 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Загружаем данные из сессии при монтировании
     useEffect(() => {
         const userFromSession = sessionStorage.getItem('user');
+
         if (userFromSession) {
             setUserState(JSON.parse(userFromSession)); // Устанавливаем пользователя из сессии
+            return;
         }
+
+        axios
+            .get('/profile/user')
+            .then((response) => {
+                setUser({
+                    id: response.data.id,
+                    name: response.data.name,
+                    roles: response.data.roles,
+                    avatar: response.data.avatar,
+                    email: response.data.email,
+                });
+            })
+            .catch((error) => {
+                console.error('Ошибка при получении данных пользователя:', error);
+            });
     }, []);
 
     return (

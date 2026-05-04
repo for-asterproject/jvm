@@ -675,7 +675,7 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({
 
 // Главный компонент Dashboard
 export default function Dashboard() {
-    const { user, setUser } = useUser();
+    const { user } = useUser();
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
     const [exchangeRateUSD, setExchangeRateUSD] = useState<number | null>(null);
@@ -693,20 +693,6 @@ export default function Dashboard() {
     const [invoiceIncludeVat, setInvoiceIncludeVat] = useState<boolean>(true);
     const [invoiceNumber, setInvoiceNumber] = useState<string>('');
     const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
-
-    useEffect(() => {
-        axios.get('/profile/user').then((response) => {
-            setUser({
-                id: response.data.id,
-                name: response.data.name,
-                roles: response.data.roles,
-                avatar: response.data.avatar,
-                email: response.data.email,
-            });
-        }).catch((error) => {
-            console.error('Ошибка при получении данных пользователя:', error);
-        });
-    }, [setUser]);
 
     useEffect(() => {
         const fetchProducts = async () => {
