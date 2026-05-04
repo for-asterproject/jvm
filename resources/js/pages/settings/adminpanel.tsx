@@ -33,6 +33,9 @@ export default function AdminPanel() {
     const [newRole, setNewRole] = useState<string>('');
     const [selectedUser, setSelectedUser] = useState<string>('');
     const [selectedRole, setSelectedRole] = useState<string>('');
+    const [passwordUserId, setPasswordUserId] = useState<string>('');
+    const [newPassword, setNewPassword] = useState<string>('');
+    const [confirmPassword, setConfirmPassword] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -123,12 +126,82 @@ export default function AdminPanel() {
             });
     };
 
+    const deleteUser = (userId: number) => {
+        if (!window.confirm('Удалить пользователя? Это действие нельзя отменить.')) {
+            return;
+        }
+
+        axios
+            .delete(`/users/${userId}`)
+            .then((response) => {
+                alert(response.data.message);
+                setUsers((currentUsers) => currentUsers.filter((user) => user.id !== userId));
+                if (selectedUser === String(userId)) {
+                    setSelectedUser('');
+                }
+            })
+            .catch((error) => {
+                console.error('Ошибка при удалении пользователя:', error);
+                setError(error.response?.data?.message ?? 'Не удалось удалить пользователя.');
+            });
+    };
+
+    const updateUserPassword = () => {
+        if (!passwordUserId) {
+            setError('Выберите пользователя для смены пароля.');
+            return;
+        }
+
+        if (!newPassword || !confirmPassword) {
+            setError('Заполните новый пароль и подтверждение.');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            setError('Подтверждение пароля не совпадает.');
+            return;
+        }
+
+        axios
+            .put(`/users/${passwordUserId}/password`, {
+                password: newPassword,
+                password_confirmation: confirmPassword,
+            })
+            .then((response) => {
+                alert(response.data.message);
+                setNewPassword('');
+                setConfirmPassword('');
+                setPasswordUserId('');
+                setError(null);
+            })
+            .catch((error) => {
+                console.error('Ошибка при смене пароля:', error);
+                setError(error.response?.data?.message ?? 'Не удалось изменить пароль пользователя.');
+            });
+    };
+
     // Колонки для DataGrid
     const userColumns: GridColDef[] = [
         { field: 'id', headerName: 'ID', width: 100 }, // Фиксированная ширина
         { field: 'name', headerName: 'Имя', width: 200 },
         { field: 'email', headerName: 'Email', width: 250 },
         { field: 'rolesString', headerName: 'Роли', width: 300 },
+        {
+            field: 'actions',
+            headerName: 'Действия',
+            width: 180,
+            sortable: false,
+            filterable: false,
+            renderCell: (params) => (
+                <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => deleteUser(params.row.id)}
+                >
+                    Удалить
+                </Button>
+            ),
+        },
     ];
 
     return (
@@ -186,6 +259,46 @@ export default function AdminPanel() {
                     </Button>
                     <Button onClick={revokeRole} style={{ marginLeft: '10px', backgroundColor: 'red' }}>
                         Отменить
+                    </Button>
+                </div>
+                <div style={{ marginTop: '20px' }}>
+                    <h3>Сменить пароль пользователю</h3>
+                    <select
+                        value={passwordUserId}
+                        onChange={(e) => {
+                            setPasswordUserId(e.target.value);
+                            setError(null);
+                        }}
+                    >
+                        <option value="">Выберите пользователя</option>
+                        {users.map((user) => (
+                            <option key={user.id} value={user.id}>
+                                {user.name}
+                            </option>
+                        ))}
+                    </select>
+                    <Input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => {
+                            setNewPassword(e.target.value);
+                            setError(null);
+                        }}
+                        placeholder="Новый пароль"
+                        className="mt-3 max-w-sm"
+                    />
+                    <Input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => {
+                            setConfirmPassword(e.target.value);
+                            setError(null);
+                        }}
+                        placeholder="Подтверждение пароля"
+                        className="mt-3 max-w-sm"
+                    />
+                    <Button onClick={updateUserPassword} style={{ marginTop: '12px' }}>
+                        Сменить пароль
                     </Button>
                 </div>
                 <div style={{ marginTop: '30px' }}>

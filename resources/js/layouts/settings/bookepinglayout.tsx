@@ -19,6 +19,12 @@ const sidebarNavItems: NavItem[] = [
         icon: null,
         role:'',
     },
+    {
+        title: 'Реквизиты',
+        href: '/company-details',
+        icon: null,
+        role:'',
+    },
 ];
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
@@ -56,7 +62,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                 <Separator className="my-6" />
 
                 <div className="flex-1">
-                    <section className="max-w-xl space-y-12">{children}</section>
+                    <section className="max-w-3xl space-y-12">{children}</section>
                 </div>
             </div>
         </div>

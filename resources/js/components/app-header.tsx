@@ -19,6 +19,7 @@ const mainNavItems: NavItem[] = [
     {
         title: 'Панель управления',
         href: '/dashboard',
+        role: '',
         icon: LayoutGrid,
     },
 ];
@@ -27,11 +28,13 @@ const rightNavItems: NavItem[] = [
     {
         title: 'Репозиторий',
         href: 'https://github.com/laravel/react-starter-kit',
+        role: '',
         icon: Folder,
     },
     {
         title: 'Документация',
         href: 'https://laravel.com/docs/starter-kits',
+        role: '',
         icon: BookOpen,
     },
 ];

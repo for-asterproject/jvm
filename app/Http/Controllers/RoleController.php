@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\Role;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 
 class RoleController extends Controller
@@ -50,6 +53,53 @@ class RoleController extends Controller
     }
     public function rate(){
         return Inertia::render('settings/rate');
+    }
+
+    public function destroyUser($id)
+    {
+        $user = User::find($id);
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'Пользователь не найден.',
+            ], 404);
+        }
+
+        if ($user->id === Auth::id()) {
+            return response()->json([
+                'message' => 'Нельзя удалить текущего авторизованного пользователя.',
+            ], 422);
+        }
+
+        $user->roles()->detach();
+        $user->delete();
+
+        return response()->json([
+            'message' => 'Пользователь успешно удален.',
+        ]);
+    }
+
+    public function updateUserPassword(Request $request, $id)
+    {
+        $user = User::find($id);
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'Пользователь не найден.',
+            ], 404);
+        }
+
+        $validatedData = $request->validate([
+            'password' => ['required', Password::defaults(), 'confirmed'],
+        ]);
+
+        $user->update([
+            'password' => Hash::make($validatedData['password']),
+        ]);
+
+        return response()->json([
+            'message' => 'Пароль пользователя успешно изменен.',
+        ]);
     }
 
 

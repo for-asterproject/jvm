@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\CompanyDetail;
 use App\Models\Product;
 use App\Imports\ProductsImport;
 use App\Models\ExchangeRate;
@@ -119,7 +120,8 @@ class ProductController extends Controller
      */
     public function price()
     {
-       
+        $vatRate = CompanyDetail::query()->value('vat_rate') ?? 0;
+
         // Получаем актуальные курсы валют
         $baseCurrencyRate = ExchangeRate::where('currency_code', 'USD')
             ->orderBy('date', 'desc')
@@ -127,20 +129,28 @@ class ProductController extends Controller
 
 
         // Получаем список всех продуктов
-        $products = Product::all()->map(function ($product) use ($baseCurrencyRate) {
-            // Рассчитываем цену в базовой валюте
+        $products = Product::all()->map(function ($product) use ($baseCurrencyRate, $vatRate) {
             $priceBaseCurrency = round($product->factory_price
                 + ($product->factory_price * $product->markup_percentage / 100)
                 + ($product->factory_price * $product->agent_bonus / 100),2);
 
-            // Рассчитываем цену в иностранной валюте
+            $vatAmountBaseCurrency = round($priceBaseCurrency * $vatRate / 100, 2);
+            $priceWithVatBaseCurrency = round($priceBaseCurrency + $vatAmountBaseCurrency, 2);
+
             $priceForeignCurrency = round($priceBaseCurrency *  $baseCurrencyRate,2);
+            $vatAmountForeignCurrency = round($vatAmountBaseCurrency * $baseCurrencyRate, 2);
+            $priceWithVatForeignCurrency = round($priceWithVatBaseCurrency * $baseCurrencyRate, 2);
 
             return [
                 'id' => $product->id,
                 'name' => $product->name,
-                'price_USD_currency' => round($priceBaseCurrency, 2), // Цена в базовой валюте
-                'price_KZT_currency' => round($priceForeignCurrency, 2), // Цена в иностранной валюте
+                'vat_rate' => round($vatRate, 2),
+                'price_USD_currency' => round($priceBaseCurrency, 2),
+                'vat_amount_USD_currency' => round($vatAmountBaseCurrency, 2),
+                'price_with_vat_USD_currency' => round($priceWithVatBaseCurrency, 2),
+                'price_KZT_currency' => round($priceForeignCurrency, 2),
+                'vat_amount_KZT_currency' => round($vatAmountForeignCurrency, 2),
+                'price_with_vat_KZT_currency' => round($priceWithVatForeignCurrency, 2),
             ];
         });
 
