@@ -41,6 +41,7 @@ Font.register({
 interface Product {
     id: number;
     name: string;
+    is_service: boolean;
     vat_rate: number;
     price_USD_currency: number;
     vat_amount_USD_currency: number;
@@ -81,6 +82,7 @@ interface InvoicePDFProps {
 interface InvoiceItem {
     id: number;
     name: string;
+    is_service: boolean;
     quantity: number;
     unitPrice: number;
 }
@@ -294,9 +296,138 @@ const styles = StyleSheet.create({
         fontSize: 10,
         lineHeight: 1.4,
     },
+    invoiceSectionRow: {
+        borderWidth: 1,
+        borderColor: '#000',
+        backgroundColor: '#f3f4f6',
+        paddingHorizontal: 6,
+        paddingVertical: 5,
+    },
+    invoiceSectionText: {
+        fontSize: 8.5,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+    },
+    invoiceSubtotalLabelCol: {
+        width: '72%',
+        borderWidth: 1,
+        borderColor: '#000',
+        padding: 4,
+        fontSize: 8,
+        fontWeight: 'bold',
+    },
+    invoiceSubtotalValueCol: {
+        width: '14%',
+        borderWidth: 1,
+        borderColor: '#000',
+        textAlign: 'right',
+        padding: 4,
+        fontSize: 7.5,
+        fontWeight: 'bold',
+        lineHeight: 1.2,
+    },
+    marketingBlock: {
+        marginTop: 12,
+    },
+    marketingPageTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 10,
+        color: '#111827',
+    },
+    marketingIntro: {
+        fontSize: 9.5,
+        lineHeight: 1.4,
+        marginBottom: 6,
+    },
+    marketingItem: {
+        marginBottom: 8,
+    },
+    marketingItemTitle: {
+        fontSize: 9,
+        fontWeight: 'bold',
+        lineHeight: 1.35,
+        marginBottom: 3,
+    },
+    marketingItemDescription: {
+        fontSize: 8.4,
+        lineHeight: 1.4,
+        marginBottom: 3,
+    },
+    marketingBullet: {
+        fontSize: 8.2,
+        lineHeight: 1.42,
+        marginBottom: 2,
+        paddingLeft: 8,
+    },
 });
 
-const formatAmount = (value: number) => value.toFixed(2);
+const marketingServices = [
+    {
+        title: 'Предпроектное консультационное сопровождение',
+        description: 'Данный этап является фундаментом проекта и входит в общую стоимость. Мы обеспечиваем:',
+        bullets: [
+            'Аудит помещений: Технический осмотр локаций под установку оборудования с учетом норм санитарно-эпидемиологического контроля.',
+            'Подбор моделей: Анализ коечного фонда и оборота медикаментов для выбора оптимальной мощности системы (количество кассет и скорость фасовки).',
+            'Планировка и планограмма: Разработка детальных схем размещения оборудования и организация эргономичных рабочих мест для фармацевтов и операторов.',
+        ],
+    },
+    {
+        title: 'Сопровождение НПА и государственных закупок',
+        description: 'Мы берем на себя экспертную поддержку при прохождении бюрократических процедур:',
+        bullets: [
+            'Работа с НПА: Консультации по приведению внутренних регламентов больницы в соответствие с законодательством в области автоматизации лекарственного обеспечения.',
+            'Техническая спецификация: Помощь в формировании грамотного технического задания для процедур госзакупок (ГЗ), исключающего риски поставки некачественного оборудования.',
+            'Юридический контроль: Сопровождение процесса согласования документации на всех этапах тендерного цикла.',
+        ],
+    },
+    {
+        title: 'Установка, монтаж и дополнительная оснастка',
+        description: 'Комплексная реализация «под ключ», включающая:',
+        bullets: [
+            'Инсталляция: Монтаж основного блока JVM и настройка прецизионных узлов.',
+            'Периферийная техника: Поставка и настройка специализированных принтеров этикеток, сканеров штрих-кодов для верификации и терминалов сбора данных.',
+            'Навигация: Установка систем указателей и маркировка зон хранения (планограмма стеллажного хранения).',
+            'Рекомендации: Подбор вспомогательной мебели (антистатические столы, шкафы) и климатического оборудования для серверных узлов.',
+        ],
+    },
+    {
+        title: 'IT-интеграция, документация и обучение',
+        bullets: [
+            'Синхронизация с КИС: Полная интеграция софта JVM с вашей медицинской информационной системой (1С:Медицина, Damumed или аналогами) для обмена данными о назначениях.',
+            'Пакет документов: Передача полных руководств по эксплуатации, технических паспортов и санитарных сертификатов.',
+            'Обучение персонала: Проведение практических тренингов для фармацевтов аптеки и IT-специалистов (администрирование базы данных, замена расходных материалов, регламентное обслуживание).',
+        ],
+    },
+    {
+        title: 'Гарантийное и сервисное обслуживание',
+        bullets: [
+            'Срок: 12 месяцев полной гарантии с момента ввода в эксплуатацию.',
+            'Выездной сервис: В случае неисправности обеспечивается оперативный выезд квалифицированных инженеров, имеющих допуск к обслуживанию высокотехнологичных медицинских систем.',
+            'Поддержка: Удаленная техническая диагностика и обновление ПО.',
+        ],
+    },
+    {
+        title: 'Обучающий визит в Южную Корею',
+        description: 'В рамках долгосрочного партнерства организуется выезд 2-х ведущих специалистов вашей организации (клинического фармаколога / главного врача / руководителя проекта) в Южную Корею:',
+        bullets: [
+            'Посещение завода JVM: Ознакомление с процессом производства и контроля качества.',
+            'Clinical Tour: 3х дневный визит в ведущие клиники Сеула, где системы JVM работают в промышленном масштабе.',
+            'Цель: Обмен опытом по оптимизации логистики внутри больницы и получению максимального экономического эффекта от внедрения.',
+        ],
+    },
+];
+
+const formatAmount = (value: number) => {
+    const normalizedValue = Number.isFinite(value) ? value : 0;
+
+    return normalizedValue
+        .toLocaleString('ru-RU', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        })
+        .replace(/[\u00A0\u202F]/g, ' ');
+};
 
 // Компонент PDF
 const CommercialOfferPDF: React.FC<{ selectedProducts: Product[]; user: User; exchangeRateUSD: number; companyDetails: string; vatRate: number }> = ({ selectedProducts, user, exchangeRateUSD, companyDetails, vatRate }) => {
@@ -327,23 +458,23 @@ const CommercialOfferPDF: React.FC<{ selectedProducts: Product[]; user: User; ex
                         <View key={product.id} style={styles.tableRow}>
                             <Text style={styles.tableColID}>{product.id}</Text>
                             <Text style={styles.tableColName}>{product.name}</Text>
-                            <Text style={styles.tableCol}>{product.price_USD_currency} USD</Text>
-                            <Text style={styles.tableCol}>{product.price_with_vat_KZT_currency} KZT</Text>
+                            <Text style={styles.tableCol}>{formatAmount(product.price_USD_currency)} USD</Text>
+                            <Text style={styles.tableCol}>{formatAmount(product.price_with_vat_KZT_currency)} KZT</Text>
                         </View>
                     ))}
                 </View>
                 <View style={styles.summaryBlock}>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Итого без НДС:</Text>
-                        <Text>{totalWithoutVatUsd.toFixed(2)} USD / {totalWithoutVatKzt.toFixed(2)} KZT</Text>
+                        <Text>{formatAmount(totalWithoutVatUsd)} USD / {formatAmount(totalWithoutVatKzt)} KZT</Text>
                     </View>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Итого НДС:</Text>
-                        <Text>{totalVatKzt.toFixed(2)} KZT</Text>
+                        <Text>{formatAmount(totalVatKzt)} KZT</Text>
                     </View>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Итого с НДС:</Text>
-                        <Text>{totalWithVatKzt.toFixed(2)} KZT</Text>
+                        <Text>{formatAmount(totalWithVatKzt)} KZT</Text>
                     </View>
                 </View>
                 <Text style={styles.footer}>
@@ -376,6 +507,8 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({
         ? totalWithoutVat * vatRate / 100
         : 0;
     const totalWithVat = includeVat ? totalWithoutVat + totalVat : totalWithoutVat;
+    const productItems = items.filter((item) => !item.is_service);
+    const serviceItems = items.filter((item) => item.is_service);
 
     const recipientLines = recipient
         .split('\n')
@@ -387,6 +520,53 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({
         phone ? phone : null,
     ].filter(Boolean) as string[];
 
+    const renderInvoiceSection = (sectionTitle: string, sectionItems: InvoiceItem[], startIndex: number) => {
+        if (sectionItems.length === 0) {
+            return null;
+        }
+
+        const sectionSubtotal = sectionItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        const sectionTotalWithVat = includeVat
+            ? sectionSubtotal * (1 + vatRate / 100)
+            : sectionSubtotal;
+
+        return (
+            <React.Fragment>
+                <View style={styles.invoiceSectionRow}>
+                    <Text style={styles.invoiceSectionText}>{sectionTitle}</Text>
+                </View>
+                {sectionItems.map((item, index) => {
+                    const lineSubtotal = item.quantity * item.unitPrice;
+                    const lineTotalWithVat = includeVat
+                        ? lineSubtotal * (1 + vatRate / 100)
+                        : lineSubtotal;
+
+                    return (
+                        <View key={item.id} style={styles.tableRow}>
+                            <Text style={styles.invoiceItemIdCol}>{startIndex + index}</Text>
+                            <Text style={styles.invoiceItemNameCol}>{item.name}</Text>
+                            <Text style={styles.invoiceItemQtyCol}>{item.quantity} ед</Text>
+                            <Text style={styles.invoiceItemPriceCol}>
+                                {formatAmount(item.unitPrice)}
+                            </Text>
+                            <Text style={styles.invoiceItemSubtotalCol}>
+                                {formatAmount(lineSubtotal)} KZT
+                            </Text>
+                            <Text style={styles.invoiceItemTotalCol}>
+                                {formatAmount(lineTotalWithVat)} KZT
+                            </Text>
+                        </View>
+                    );
+                })}
+                <View style={styles.tableRow}>
+                    <Text style={styles.invoiceSubtotalLabelCol}>Итого по разделу «{sectionTitle}»</Text>
+                    <Text style={styles.invoiceSubtotalValueCol}>{formatAmount(sectionSubtotal)} KZT</Text>
+                    <Text style={styles.invoiceSubtotalValueCol}>{formatAmount(sectionTotalWithVat)} KZT</Text>
+                </View>
+            </React.Fragment>
+        );
+    };
+
     return (
         <Document>
             <Page size="A4" style={styles.page}>
@@ -396,7 +576,7 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({
                         <Text>{companyDetails}</Text>
                     </View>
                     <View style={styles.invoiceMetaBlock}>
-                        <Text style={styles.invoiceTitle}>ИНВОЙС</Text>
+                        <Text style={styles.invoiceTitle}>ЦЕНОВОЕ ПРЕДЛОЖЕНИЕ</Text>
                         <Text style={styles.invoiceMetaText}>№ {invoiceNumber}</Text>
                         <Text style={styles.invoiceMetaText}>Дата: {invoiceDate}</Text>
                     </View>
@@ -444,26 +624,8 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({
                         <Text style={[styles.invoiceItemSubtotalCol, styles.tableHeader]}>Сумма без НДС</Text>
                         <Text style={[styles.invoiceItemTotalCol, styles.tableHeader]}>Сумма с НДС</Text>
                     </View>
-                    {items.map((item, index) => {
-                        const lineSubtotal = item.quantity * item.unitPrice;
-                        const lineTotalWithVat = lineSubtotal * (1 + vatRate / 100);
-
-                        return (
-                        <View key={item.id} style={styles.tableRow}>
-                            <Text style={styles.invoiceItemIdCol}>{index + 1}</Text>
-                            <Text style={styles.invoiceItemNameCol}>{item.name}</Text>
-                            <Text style={styles.invoiceItemQtyCol}>{item.quantity} ед</Text>
-                            <Text style={styles.invoiceItemPriceCol}>
-                                {formatAmount(item.unitPrice)}
-                            </Text>
-                            <Text style={styles.invoiceItemSubtotalCol}>
-                                {formatAmount(lineSubtotal)} KZT
-                            </Text>
-                            <Text style={styles.invoiceItemTotalCol}>
-                                {formatAmount(lineTotalWithVat)} KZT
-                            </Text>
-                        </View>
-                    )})}
+                    {renderInvoiceSection('Товары', productItems, 1)}
+                    {renderInvoiceSection('Услуги', serviceItems, productItems.length + 1)}
                 </View>
 
                 <View style={styles.summaryBlock}>
@@ -482,7 +644,30 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({
                 </View>
 
                 <Text style={styles.invoiceTerms}>Условия оплаты: {(prepaymentPercent || '100').trim()}% предоплата</Text>
-                
+            </Page>
+
+            <Page size="A4" style={styles.page}>
+                <View style={styles.marketingBlock}>
+                    <Text style={styles.marketingPageTitle}>Дополнительные услуги</Text>
+                    {/* <Text style={styles.marketingIntro}>
+                        Для маркетинга. Это наши доп услуги, которые автоматом наши клиенты получают:
+                    </Text> */}
+                    {marketingServices.map((service, index) => (
+                        <View key={service.title} style={styles.marketingItem}>
+                            <Text style={styles.marketingItemTitle}>
+                                {index + 1}. {service.title}
+                            </Text>
+                            {service.description ? (
+                                <Text style={styles.marketingItemDescription}>{service.description}</Text>
+                            ) : null}
+                            {service.bullets.map((bullet) => (
+                                <Text key={bullet} style={styles.marketingBullet}>
+                                    • {bullet}
+                                </Text>
+                            ))}
+                        </View>
+                    ))}
+                </View>
             </Page>
         </Document>
     );
@@ -561,6 +746,12 @@ export default function Dashboard() {
 
     const columns: GridColDef[] = [
         { field: 'id', headerName: 'ID', width: 70 },
+        {
+            field: 'is_service',
+            headerName: 'Тип',
+            width: 110,
+            renderCell: (params) => (params.row.is_service ? 'Услуга' : 'Товар'),
+        },
         { field: 'name', headerName: 'Название', width: 200 },
         { field: 'vat_rate', headerName: 'НДС (%)', type: 'number', width: 110 },
         { field: 'price_USD_currency', headerName: 'Без НДС (USD)', type: 'number', width: 150 },
@@ -594,9 +785,13 @@ export default function Dashboard() {
 
         if (open) {
             setInvoiceItems(
-                filteredProducts.map((product) => ({
+                filteredProducts
+                    .slice()
+                    .sort((leftProduct, rightProduct) => Number(leftProduct.is_service) - Number(rightProduct.is_service))
+                    .map((product) => ({
                     id: product.id,
                     name: product.name,
+                    is_service: product.is_service,
                     quantity: 1,
                     unitPrice: product.price_KZT_currency,
                 }))
@@ -677,19 +872,11 @@ export default function Dashboard() {
                             <div className="flex items-center gap-3">
                                 <Button
                                     type="button"
-                                    onClick={handleDownload}
-                                    disabled={filteredProducts.length === 0 || !user || !exchangeRateUSD}
-                                    className="bg-green-700 hover:bg-green-800"
-                                >
-                                    Коммерческое предложение
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="outline"
                                     onClick={() => handleInvoiceDialogOpen(true)}
                                     disabled={filteredProducts.length === 0 || !user}
+                                    className="bg-orange-600 text-white shadow-sm hover:bg-orange-700"
                                 >
-                                    Сформировать инвойс
+                                    Ценовое предложение
                                 </Button>
                             </div>
                         </div>
@@ -714,9 +901,9 @@ export default function Dashboard() {
                 <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-5xl overflow-hidden p-0 sm:w-full sm:max-w-5xl">
                     <div className="flex max-h-[92vh] flex-col p-4 sm:p-6">
                         <DialogHeader className="shrink-0 border-b bg-background pb-4">
-                            <DialogTitle>Сформировать инвойс</DialogTitle>
+                            <DialogTitle>Сформировать ценовое предложение</DialogTitle>
                             <DialogDescription>
-                                Заполните получателя и выберите, учитывать ли НДС в суммах инвойса.
+                                Заполните данные получателя и параметры ценового предложения.
                             </DialogDescription>
                         </DialogHeader>
 

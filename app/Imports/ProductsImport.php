@@ -18,6 +18,7 @@ class ProductsImport implements ToModel, WithHeadingRow
             'factory_price' => $row['factory_price_usd'], // Столбец "factory_price_usd"
             'markup_percentage' => $row['markup_percentage'], // Столбец "markup_percentage"
             'agent_bonus' => $row['agent_bonus'], // Столбец "agent_bonus"
+            'is_service' => filter_var($row['is_service'] ?? false, FILTER_VALIDATE_BOOLEAN), // Опциональный столбец "is_service"
         ]);
     }
 }

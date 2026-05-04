@@ -33,7 +33,10 @@ class ProductController extends Controller
             'factory_price' => 'required|numeric|min:0',
             'markup_percentage' => 'required|numeric|min:0',
             'agent_bonus' => 'required|numeric|min:0',
+            'is_service' => 'nullable|boolean',
         ]);
+
+        $validatedData['is_service'] = (bool) ($validatedData['is_service'] ?? false);
 
         // Создание продукции
         $product = Product::create($validatedData);
@@ -64,6 +67,7 @@ class ProductController extends Controller
             'factory_price' => 'sometimes|required|numeric|min:0',
             'markup_percentage' => 'sometimes|required|numeric|min:0',
             'agent_bonus' => 'sometimes|required|numeric|min:0',
+            'is_service' => 'sometimes|boolean',
         ]);
 
         // Обновление данных продукции
@@ -144,6 +148,7 @@ class ProductController extends Controller
             return [
                 'id' => $product->id,
                 'name' => $product->name,
+                'is_service' => (bool) $product->is_service,
                 'vat_rate' => round($vatRate, 2),
                 'price_USD_currency' => round($priceBaseCurrency, 2),
                 'vat_amount_USD_currency' => round($vatAmountBaseCurrency, 2),

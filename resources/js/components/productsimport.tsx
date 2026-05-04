@@ -36,13 +36,17 @@ const ImportProducts: React.FC = () => {
     };
 
     return (
-        <div>
-            <div><Label>В Excel должны содержать столбцы: name, factory_price_usd, markup_percentage, agent_bonus</Label></div>
-        <div style={{ display: 'flex'}}>
-            <div style={{margin:'5px'}}> 
-                <Input type="file" accept=".xls,.xlsx,.csv" onChange={handleFileChange}  /></div>
-            <div style={{margin:'5px'}}> <Button onClick={handleUpload} >Загрузить файл</Button></div>
-        </div>
+        <div className="space-y-3 rounded-xl border p-4">
+            <div className="space-y-1">
+                <Label>Импорт из Excel</Label>
+                <p className="text-sm text-muted-foreground">
+                    В Excel должны быть столбцы: name, factory_price_usd, markup_percentage, agent_bonus. Опционально: is_service.
+                </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Input type="file" accept=".xls,.xlsx,.csv" onChange={handleFileChange} />
+                <Button onClick={handleUpload}>Загрузить файл</Button>
+            </div>
         </div>
     );
 };
