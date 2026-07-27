@@ -157,3 +157,64 @@
         @apply bg-background text-foreground;
     }
 }
+
+.crm-shell {
+    background: linear-gradient(180deg, rgba(239, 246, 255, 0.72), rgba(248, 250, 252, 0.96) 28rem), #f8fafc;
+}
+
+.dark .crm-shell {
+    background: linear-gradient(180deg, rgba(10, 34, 62, 0.5), rgba(5, 13, 25, 0.97) 28rem), #050d19;
+}
+
+.crm-reveal {
+    animation: crm-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.crm-card-hover {
+    transition:
+        transform 180ms ease,
+        border-color 180ms ease,
+        box-shadow 180ms ease;
+}
+
+.crm-card-hover:hover {
+    transform: translateY(-2px);
+    border-color: rgba(59, 130, 246, 0.26);
+    box-shadow: 0 22px 50px -36px rgba(15, 45, 82, 0.7);
+}
+
+.crm-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
+}
+
+.crm-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.crm-scrollbar::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.35);
+}
+
+@keyframes crm-rise {
+    from {
+        transform: translateY(8px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .crm-reveal {
+        animation: none;
+    }
+
+    .crm-card-hover {
+        transition: none;
+    }
+}
