@@ -66,17 +66,26 @@ class ProfileController extends Controller
         $user = Auth::user(); // Получение текущего аутентифицированного пользователя
 
         // Проверяем, есть ли пользователь
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Пользователь не найден'], 404);
         }
+
+        $user->loadMissing('roles');
 
         // Формируем ответ с данными пользователя
         return response()->json([
             'id' => $user->id,
             'name' => $user->name,
             'roles' => $user->roles->pluck('name'), // Получение ролей (если установлен relation roles)
+            'permissions' => [
+                'isAdministrator' => $user->isAdministrator(),
+                'isManager' => $user->isManager(),
+                'isStaff' => $user->isStaff(),
+                'isConsultant' => $user->isConsultant(),
+                'hasCrmAccess' => $user->hasCrmAccess(),
+            ],
             'avatar' => $user->avatar, // Например, если у пользователя есть поле avatar
-            'email'=> $user->email,
+            'email' => $user->email,
         ], 200);
     }
 }

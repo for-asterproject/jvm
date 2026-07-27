@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import AppLayout from '@/layouts/app-layout';
+import { type BreadcrumbItem } from '@/types';
+import { Head } from '@inertiajs/react';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import axios from 'axios';
+import { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -25,6 +25,8 @@ interface User {
     email: string;
     roles: Role[]; // Роли пользователя
     rolesString?: string; // Добавляем строковое поле для ролей
+    manager?: { id: number; name: string } | null;
+    managerName?: string;
 }
 
 export default function AdminPanel() {
@@ -36,6 +38,8 @@ export default function AdminPanel() {
     const [passwordUserId, setPasswordUserId] = useState<string>('');
     const [newPassword, setNewPassword] = useState<string>('');
     const [confirmPassword, setConfirmPassword] = useState<string>('');
+    const [managerUserId, setManagerUserId] = useState<string>('');
+    const [managerId, setManagerId] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -46,6 +50,7 @@ export default function AdminPanel() {
                 const usersWithRoles = response.data.users.map((user: User) => ({
                     ...user,
                     rolesString: user.roles.map((role) => role.name).join(', ') || 'Роли отсутствуют',
+                    managerName: user.manager?.name ?? 'Не назначен',
                 }));
                 setRoles(response.data.roles);
                 setUsers(usersWithRoles);
@@ -118,11 +123,34 @@ export default function AdminPanel() {
                 const usersWithRoles = response.data.users.map((user: User) => ({
                     ...user,
                     rolesString: user.roles.map((role) => role.name).join(', ') || 'Роли отсутствуют',
+                    managerName: user.manager?.name ?? 'Не назначен',
                 }));
                 setUsers(usersWithRoles);
             })
             .catch((error) => {
                 console.error('Ошибка обновления данных пользователей:', error);
+            });
+    };
+
+    const updateManager = () => {
+        if (!managerUserId) {
+            setError('Выберите сотрудника.');
+            return;
+        }
+
+        axios
+            .put(`/users/${managerUserId}/manager`, {
+                manager_id: managerId || null,
+            })
+            .then((response) => {
+                alert(response.data.message);
+                setManagerUserId('');
+                setManagerId('');
+                setError(null);
+                refreshUsers();
+            })
+            .catch((error) => {
+                setError(error.response?.data?.message ?? 'Не удалось назначить руководителя.');
             });
     };
 
@@ -186,6 +214,7 @@ export default function AdminPanel() {
         { field: 'name', headerName: 'Имя', width: 200 },
         { field: 'email', headerName: 'Email', width: 250 },
         { field: 'rolesString', headerName: 'Роли', width: 300 },
+        { field: 'managerName', headerName: 'Руководитель', width: 220 },
         {
             field: 'actions',
             headerName: 'Действия',
@@ -193,11 +222,7 @@ export default function AdminPanel() {
             sortable: false,
             filterable: false,
             renderCell: (params) => (
-                <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={() => deleteUser(params.row.id)}
-                >
+                <Button type="button" variant="destructive" onClick={() => deleteUser(params.row.id)}>
                     Удалить
                 </Button>
             ),
@@ -208,123 +233,147 @@ export default function AdminPanel() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Админ панель" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-            <div style={{ padding: '20px' }}>
-                <h2>Управление ролями</h2>
-                {error && <p style={{ color: 'red' }}>{error}</p>}
-                <div>
-                    <h3>Создать новую роль</h3>
-                    <input
-                        type="text"
-                        value={newRole}
-                        onChange={(e) => {
-                            setNewRole(e.target.value);
-                            setError(null); // Очистить ошибку
-                        }}
-                        placeholder="Название роли"
-                        style={{ marginRight: '10px' }}
-                    />
-                    <Button onClick={createRole}>Создать</Button>
-                </div>
-                <div style={{ marginTop: '20px' }}>
-                    <h3>Назначить или отменить роль пользователю</h3>
-                    <select
-                        onChange={(e) => {
-                            setSelectedUser(e.target.value);
-                            setError(null); // Очистить ошибку
-                        }}
-                    >
-                        <option value="">Выберите пользователя</option>
-                        {users.map((user) => (
-                            <option key={user.id} value={user.id}>
-                                {user.name}
-                            </option>
-                        ))}
-                    </select>
-                    <select
-                        onChange={(e) => {
-                            setSelectedRole(e.target.value);
-                            setError(null); // Очистить ошибку
-                        }}
-                        style={{ marginLeft: '10px' }}
-                    >
-                        <option value="">Выберите роль</option>
-                        {roles.map((role) => (
-                            <option key={role.id} value={role.id}>
-                                {role.name}
-                            </option>
-                        ))}
-                    </select>
-                    <Button onClick={assignRole} style={{ marginLeft: '10px' }}>
-                        Назначить
-                    </Button>
-                    <Button onClick={revokeRole} style={{ marginLeft: '10px', backgroundColor: 'red' }}>
-                        Отменить
-                    </Button>
-                </div>
-                <div style={{ marginTop: '20px' }}>
-                    <h3>Сменить пароль пользователю</h3>
-                    <select
-                        value={passwordUserId}
-                        onChange={(e) => {
-                            setPasswordUserId(e.target.value);
-                            setError(null);
-                        }}
-                    >
-                        <option value="">Выберите пользователя</option>
-                        {users.map((user) => (
-                            <option key={user.id} value={user.id}>
-                                {user.name}
-                            </option>
-                        ))}
-                    </select>
-                    <Input
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => {
-                            setNewPassword(e.target.value);
-                            setError(null);
-                        }}
-                        placeholder="Новый пароль"
-                        className="mt-3 max-w-sm"
-                    />
-                    <Input
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => {
-                            setConfirmPassword(e.target.value);
-                            setError(null);
-                        }}
-                        placeholder="Подтверждение пароля"
-                        className="mt-3 max-w-sm"
-                    />
-                    <Button onClick={updateUserPassword} style={{ marginTop: '12px' }}>
-                        Сменить пароль
-                    </Button>
-                </div>
-                <div style={{ marginTop: '30px' }}>
-                    <h3>Список пользователей</h3>
-                    <div style={{ height: 400, width: '100%', overflowX: 'auto' }}>
-                        <DataGrid
-                            rows={users}
-                            columns={userColumns}
-                            pageSizeOptions={[25, 50, 100]}
-                            initialState={{
-                                pagination: { paginationModel: { pageSize: 25, page: 0 } },
+                <div style={{ padding: '20px' }}>
+                    <h2>Управление ролями</h2>
+                    {error && <p style={{ color: 'red' }}>{error}</p>}
+                    <div>
+                        <h3>Создать новую роль</h3>
+                        <input
+                            type="text"
+                            value={newRole}
+                            onChange={(e) => {
+                                setNewRole(e.target.value);
+                                setError(null); // Очистить ошибку
                             }}
-                            pagination
-                            sx={{
-                                '& .MuiDataGrid-root': {
-                                    minWidth: '800px', // Устанавливаем минимальную ширину таблицы
-                                    overflowX: 'auto', // Включаем горизонтальный скрол
-                                },
-                                '& .MuiDataGrid-columnHeaders': {
-                                    width: 'auto', // Не фиксируем ширину заголовков
-                                },
-                            }}
+                            placeholder="Название роли"
+                            style={{ marginRight: '10px' }}
                         />
+                        <Button onClick={createRole}>Создать</Button>
+                    </div>
+                    <div style={{ marginTop: '20px' }}>
+                        <h3>Назначить или отменить роль пользователю</h3>
+                        <select
+                            onChange={(e) => {
+                                setSelectedUser(e.target.value);
+                                setError(null); // Очистить ошибку
+                            }}
+                        >
+                            <option value="">Выберите пользователя</option>
+                            {users.map((user) => (
+                                <option key={user.id} value={user.id}>
+                                    {user.name}
+                                </option>
+                            ))}
+                        </select>
+                        <select
+                            onChange={(e) => {
+                                setSelectedRole(e.target.value);
+                                setError(null); // Очистить ошибку
+                            }}
+                            style={{ marginLeft: '10px' }}
+                        >
+                            <option value="">Выберите роль</option>
+                            {roles.map((role) => (
+                                <option key={role.id} value={role.id}>
+                                    {role.name}
+                                </option>
+                            ))}
+                        </select>
+                        <Button onClick={assignRole} style={{ marginLeft: '10px' }}>
+                            Назначить
+                        </Button>
+                        <Button onClick={revokeRole} style={{ marginLeft: '10px', backgroundColor: 'red' }}>
+                            Отменить
+                        </Button>
+                    </div>
+                    <div style={{ marginTop: '20px' }}>
+                        <h3>Назначить руководителя сотруднику</h3>
+                        <select value={managerUserId} onChange={(event) => setManagerUserId(event.target.value)}>
+                            <option value="">Выберите сотрудника</option>
+                            {users.map((user) => (
+                                <option key={user.id} value={user.id}>
+                                    {user.name}
+                                </option>
+                            ))}
+                        </select>
+                        <select value={managerId} onChange={(event) => setManagerId(event.target.value)} style={{ marginLeft: '10px' }}>
+                            <option value="">Без руководителя</option>
+                            {users
+                                .filter((user) => user.roles.some((role) => role.name === 'Руководитель'))
+                                .map((user) => (
+                                    <option key={user.id} value={user.id}>
+                                        {user.name}
+                                    </option>
+                                ))}
+                        </select>
+                        <Button onClick={updateManager} style={{ marginLeft: '10px' }}>
+                            Сохранить
+                        </Button>
+                    </div>
+                    <div style={{ marginTop: '20px' }}>
+                        <h3>Сменить пароль пользователю</h3>
+                        <select
+                            value={passwordUserId}
+                            onChange={(e) => {
+                                setPasswordUserId(e.target.value);
+                                setError(null);
+                            }}
+                        >
+                            <option value="">Выберите пользователя</option>
+                            {users.map((user) => (
+                                <option key={user.id} value={user.id}>
+                                    {user.name}
+                                </option>
+                            ))}
+                        </select>
+                        <Input
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => {
+                                setNewPassword(e.target.value);
+                                setError(null);
+                            }}
+                            placeholder="Новый пароль"
+                            className="mt-3 max-w-sm"
+                        />
+                        <Input
+                            type="password"
+                            value={confirmPassword}
+                            onChange={(e) => {
+                                setConfirmPassword(e.target.value);
+                                setError(null);
+                            }}
+                            placeholder="Подтверждение пароля"
+                            className="mt-3 max-w-sm"
+                        />
+                        <Button onClick={updateUserPassword} style={{ marginTop: '12px' }}>
+                            Сменить пароль
+                        </Button>
+                    </div>
+                    <div style={{ marginTop: '30px' }}>
+                        <h3>Список пользователей</h3>
+                        <div style={{ height: 400, width: '100%', overflowX: 'auto' }}>
+                            <DataGrid
+                                rows={users}
+                                columns={userColumns}
+                                pageSizeOptions={[25, 50, 100]}
+                                initialState={{
+                                    pagination: { paginationModel: { pageSize: 25, page: 0 } },
+                                }}
+                                pagination
+                                sx={{
+                                    '& .MuiDataGrid-root': {
+                                        minWidth: '800px', // Устанавливаем минимальную ширину таблицы
+                                        overflowX: 'auto', // Включаем горизонтальный скрол
+                                    },
+                                    '& .MuiDataGrid-columnHeaders': {
+                                        width: 'auto', // Не фиксируем ширину заголовков
+                                    },
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
-            </div>
             </div>
         </AppLayout>
     );

@@ -4,6 +4,9 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -21,6 +24,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'manager_id',
     ];
 
     /**
@@ -46,8 +50,67 @@ class User extends Authenticatable
         ];
     }
 
-    public function roles() {
+    public function roles(): BelongsToMany
+    {
         return $this->belongsToMany(Role::class);
     }
-    
+
+    public function manager(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'manager_id');
+    }
+
+    public function directReports(): HasMany
+    {
+        return $this->hasMany(self::class, 'manager_id');
+    }
+
+    public function projects(): BelongsToMany
+    {
+        return $this->belongsToMany(Project::class)->withTimestamps();
+    }
+
+    public function managedProjects(): HasMany
+    {
+        return $this->hasMany(Project::class, 'manager_id');
+    }
+
+    public function assignedTasks(): HasMany
+    {
+        return $this->hasMany(Task::class, 'assignee_id');
+    }
+
+    public function hasRole(string ...$roles): bool
+    {
+        $roleNames = $this->relationLoaded('roles')
+            ? $this->roles->pluck('name')
+            : $this->roles()->pluck('name');
+
+        return $roleNames->intersect($roles)->isNotEmpty();
+    }
+
+    public function isAdministrator(): bool
+    {
+        return $this->hasRole('Администратор');
+    }
+
+    public function isManager(): bool
+    {
+        return $this->hasRole('Руководитель');
+    }
+
+    public function isConsultant(): bool
+    {
+        return $this->hasRole('Консультант');
+    }
+
+    public function isStaff(): bool
+    {
+        return $this->hasRole('Администратор', 'Руководитель', 'Сотрудник', 'Бухгалтер');
+    }
+
+    public function hasCrmAccess(): bool
+    {
+        return $this->isStaff() || $this->isConsultant();
+    }
 }

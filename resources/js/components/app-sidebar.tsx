@@ -2,33 +2,10 @@ import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
-import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
-import { BookOpen, Boxes, CircleDollarSign, Folder, LayoutGrid, ShieldCheck } from 'lucide-react';
+import { type NavItem, type SharedData } from '@/types';
+import { Link, usePage } from '@inertiajs/react';
+import { BookOpen, BriefcaseBusiness, CalendarDays, CircleDollarSign, Contact, FileSliders, Folder, LayoutGrid, ShieldCheck } from 'lucide-react';
 import AppLogo from './app-logo';
-import { useUser } from '@/components/UserContext'; // Контекст для получения данных пользователя
-
-// Навигация основного меню
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Админ панель',
-        href: '/adminpanel',
-        icon: ShieldCheck,
-        role: 'Администратор', // Доступ только для администраторов
-    },
-    {
-        title: 'Бухгалтерия',
-        href: '/productsmanagment',
-        icon: CircleDollarSign,
-        role: 'Бухгалтер', // Доступ  для роль Бухгалтер
-    },
-    {
-        title: 'Панель управления',
-        href: '/dashboard',
-        icon: LayoutGrid,
-        role:'',
-    },
-];
 
 // Навигация нижнего меню
 const footerNavItems: NavItem[] = [
@@ -36,22 +13,37 @@ const footerNavItems: NavItem[] = [
         title: 'Репозиторий',
         href: 'https://github.com/laravel/react-starter-kit',
         icon: Folder,
-        role:'Администратор',
+        role: 'Администратор',
     },
     {
         title: 'Документация',
         href: 'https://laravel.com/docs/starter-kits',
         icon: BookOpen,
-        role:'Администратор',
+        role: 'Администратор',
     },
 ];
 
 export function AppSidebar() {
-    const { user  } = useUser(); // Получение ролей пользователя из контекста
-    // Фильтрация элементов меню на основе роли
-    const filteredMainNavItems = mainNavItems.filter((item) => {
-        return !item.role || user?.roles.includes(item.role);
-    });
+    const { auth } = usePage<SharedData>().props;
+    const user = auth.user;
+    const roles = user?.roles ?? [];
+    const permissions = user?.permissions;
+
+    const mainNavItems: NavItem[] = [
+        ...(permissions?.isAdministrator ? [{ title: 'Админ панель', href: '/adminpanel', icon: ShieldCheck, role: 'Администратор' }] : []),
+        ...(roles.includes('Бухгалтер') ? [{ title: 'Бухгалтерия', href: '/productsmanagment', icon: CircleDollarSign, role: 'Бухгалтер' }] : []),
+        { title: 'Панель управления', href: '/dashboard', icon: LayoutGrid, role: '' },
+        ...(permissions?.hasCrmAccess
+            ? [
+                  { title: 'Презентации', href: '/presentations', icon: FileSliders, role: '' },
+                  ...(permissions.isStaff ? [{ title: 'Клиентская база', href: '/clients', icon: Contact, role: '' }] : []),
+                  { title: 'Проекты JVM', href: '/projects/jvm', icon: BriefcaseBusiness, role: '' },
+                  { title: 'Планирование', href: '/planning', icon: CalendarDays, role: '' },
+                  { title: 'Проекты PTL', href: '/projects/ptl', icon: BriefcaseBusiness, role: '' },
+                  { title: 'Проекты WAP', href: '/projects/wap', icon: BriefcaseBusiness, role: '' },
+              ]
+            : []),
+    ];
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -68,7 +60,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={filteredMainNavItems} />
+                <NavMain items={mainNavItems} />
             </SidebarContent>
 
             <SidebarFooter>
