@@ -24,13 +24,37 @@ export interface PresentationRecord {
     id: number;
     title: string;
     description: string | null;
-    source_type: 'file' | 'link';
+    attachments: PresentationAttachmentRecord[];
+    attachments_count: number;
+    total_size: number;
+    uploader?: UserSummary | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PresentationAttachmentRecord {
+    id: number;
+    kind: 'file' | 'link';
+    media_type: 'image' | 'video' | 'document' | 'archive' | 'link';
+    display_name: string;
     url: string | null;
     original_name: string | null;
     mime_type: string | null;
-    size: number | null;
-    uploader?: UserSummary | null;
+    size: number;
+    status: 'uploading' | 'ready' | 'failed';
+    sort_order: number;
+    view_url: string | null;
+    download_url: string | null;
     created_at: string;
+}
+
+export interface PresentationLimits {
+    max_attachments: number;
+    max_file_size: number;
+    max_total_size: number;
+    chunk_size: number;
+    parallel_uploads: number;
+    allowed_extensions: string[];
 }
 
 export type ProjectStatus = 'new' | 'in_progress' | 'paused' | 'completed' | 'cancelled';

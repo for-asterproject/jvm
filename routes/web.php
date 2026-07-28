@@ -3,7 +3,9 @@
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CompanyDetailController;
 use App\Http\Controllers\ExchangeRateController;
+use App\Http\Controllers\PresentationAttachmentController;
 use App\Http\Controllers\PresentationController;
+use App\Http\Controllers\PresentationUploadController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\RoleController;
@@ -49,9 +51,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/presentations', [PresentationController::class, 'index'])->name('presentations.index');
     Route::post('/presentations', [PresentationController::class, 'store'])->name('presentations.store');
+    Route::get('/presentations/{presentation}', [PresentationController::class, 'show'])->name('presentations.show');
     Route::put('/presentations/{presentation}', [PresentationController::class, 'update'])->name('presentations.update');
     Route::get('/presentations/{presentation}/download', [PresentationController::class, 'download'])->name('presentations.download');
     Route::delete('/presentations/{presentation}', [PresentationController::class, 'destroy'])->name('presentations.destroy');
+    Route::post('/presentations/{presentation}/attachments/links', [PresentationAttachmentController::class, 'storeLink'])->name('presentations.attachments.links.store');
+    Route::patch('/presentations/{presentation}/attachments/order', [PresentationAttachmentController::class, 'reorder'])->name('presentations.attachments.order');
+    Route::get('/presentations/{presentation}/attachments/{attachment}/view', [PresentationAttachmentController::class, 'view'])->name('presentations.attachments.view');
+    Route::get('/presentations/{presentation}/attachments/{attachment}/download', [PresentationAttachmentController::class, 'download'])->name('presentations.attachments.download');
+    Route::delete('/presentations/{presentation}/attachments/{attachment}', [PresentationAttachmentController::class, 'destroy'])->name('presentations.attachments.destroy');
+    Route::post('/presentations/{presentation}/uploads', [PresentationUploadController::class, 'store'])->name('presentations.uploads.store');
+    Route::put('/presentations/{presentation}/uploads/{attachment}/chunks/{chunkIndex}', [PresentationUploadController::class, 'storeChunk'])->whereNumber('chunkIndex')->name('presentations.uploads.chunks.store');
+    Route::post('/presentations/{presentation}/uploads/{attachment}/complete', [PresentationUploadController::class, 'complete'])->name('presentations.uploads.complete');
+    Route::delete('/presentations/{presentation}/uploads/{attachment}', [PresentationUploadController::class, 'abort'])->name('presentations.uploads.abort');
 
     Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');
     Route::post('/clients', [ClientController::class, 'store'])->name('clients.store');

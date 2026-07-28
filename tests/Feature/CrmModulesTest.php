@@ -4,19 +4,27 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Presentation;
+use App\Models\PresentationAttachment;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class CrmModulesTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Storage::fake('local');
+    }
 
     public function test_staff_can_manage_clients_and_consultant_cannot_access_them(): void
     {
@@ -52,49 +60,271 @@ class CrmModulesTest extends TestCase
         $this->actingAs($consultant)->delete("/clients/{$client->id}")->assertForbidden();
     }
 
-    public function test_staff_can_upload_presentations_and_consultant_has_read_only_access(): void
+    public function test_staff_can_manage_presentation_collections_and_consultant_has_read_only_access(): void
     {
-        Storage::fake('local');
         $employee = $this->userWithRole('Сотрудник');
         $consultant = $this->userWithRole('Консультант');
 
         $this->actingAs($employee)->post('/presentations', [
             'title' => 'Презентация JVM',
             'description' => 'Для клиентов',
-            'source_type' => 'file',
-            'file' => UploadedFile::fake()->create('jvm.pdf', 512, 'application/pdf'),
         ])->assertRedirect();
 
         $presentation = Presentation::firstOrFail();
-        Storage::disk('local')->assertExists($presentation->path);
+        $this->assertSame('collection', $presentation->source_type);
+
+        $this->actingAs($employee)->post(
+            "/presentations/{$presentation->id}/attachments/links",
+            [
+                'display_name' => 'Видео JVM',
+                'url' => 'https://example.com/jvm',
+            ],
+        )->assertRedirect();
+        $this->assertDatabaseHas('presentation_attachments', [
+            'presentation_id' => $presentation->id,
+            'kind' => 'link',
+            'display_name' => 'Видео JVM',
+        ]);
 
         $this->actingAs($consultant)->get('/presentations')->assertOk();
         $this->actingAs($consultant)
-            ->get("/presentations/{$presentation->id}/download")
-            ->assertDownload('jvm.pdf');
-        $this->actingAs($consultant)->post('/presentations', [
-            'title' => 'Запрещено',
-            'source_type' => 'link',
-            'url' => 'https://example.com',
-        ])->assertForbidden();
+            ->get("/presentations/{$presentation->id}")
+            ->assertOk();
+        $this->actingAs($consultant)
+            ->post("/presentations/{$presentation->id}/attachments/links", [
+                'display_name' => 'Запрещено',
+                'url' => 'https://example.com',
+            ])
+            ->assertForbidden();
+        $this->actingAs($consultant)
+            ->postJson("/presentations/{$presentation->id}/uploads", [
+                'name' => 'forbidden.pdf',
+                'size' => 1024,
+                'mime_type' => 'application/pdf',
+            ])
+            ->assertForbidden();
     }
 
-    public function test_presentation_file_type_and_size_are_validated(): void
+    public function test_presentation_chunked_upload_is_validated_completed_and_private(): void
     {
-        Storage::fake('local');
+        config(['presentations.chunk_size' => 4]);
         $employee = $this->userWithRole('Сотрудник');
+        $consultant = $this->userWithRole('Консультант');
+        $presentation = Presentation::create([
+            'title' => 'JVM',
+            'source_type' => 'collection',
+            'uploaded_by' => $employee->id,
+        ]);
 
-        $this->actingAs($employee)->post('/presentations', [
-            'title' => 'Опасный файл',
-            'source_type' => 'file',
-            'file' => UploadedFile::fake()->create('payload.exe', 100, 'application/octet-stream'),
-        ])->assertSessionHasErrors('file');
+        $this->actingAs($employee)
+            ->postJson("/presentations/{$presentation->id}/uploads", [
+                'name' => 'payload.exe',
+                'size' => 100,
+                'mime_type' => 'application/octet-stream',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('name');
 
-        $this->actingAs($employee)->post('/presentations', [
-            'title' => 'Большой файл',
-            'source_type' => 'file',
-            'file' => UploadedFile::fake()->create('large.pdf', 26 * 1024, 'application/pdf'),
-        ])->assertSessionHasErrors('file');
+        $this->actingAs($employee)
+            ->postJson("/presentations/{$presentation->id}/uploads", [
+                'name' => 'large.pdf',
+                'size' => config('presentations.max_file_size') + 1,
+                'mime_type' => 'application/pdf',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('size');
+
+        $response = $this->actingAs($employee)
+            ->postJson("/presentations/{$presentation->id}/uploads", [
+                'name' => 'jvm.pdf',
+                'size' => 8,
+                'mime_type' => 'application/pdf',
+                'last_modified' => 123,
+            ])
+            ->assertOk()
+            ->assertJsonPath('chunk_size', 4)
+            ->assertJsonPath('total_chunks', 2)
+            ->assertJsonPath('uploaded_chunks', []);
+
+        $attachment = PresentationAttachment::firstOrFail();
+        $this->putChunk(
+            $employee,
+            "/presentations/{$presentation->id}/uploads/{$attachment->id}/chunks/0",
+            'ABCD',
+        )->assertOk();
+
+        $this->actingAs($employee)
+            ->postJson(
+                "/presentations/{$presentation->id}/uploads/{$attachment->id}/complete",
+            )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file');
+
+        $this->putChunk(
+            $employee,
+            "/presentations/{$presentation->id}/uploads/{$attachment->id}/chunks/1",
+            'XYZ',
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('chunk');
+
+        $this->putChunk(
+            $employee,
+            "/presentations/{$presentation->id}/uploads/{$attachment->id}/chunks/1",
+            'EFGH',
+        )->assertOk();
+
+        $this->actingAs($employee)
+            ->postJson(
+                "/presentations/{$presentation->id}/uploads/{$attachment->id}/complete",
+            )
+            ->assertOk();
+
+        $this->assertSame(
+            PresentationAttachment::STATUS_READY,
+            $attachment->fresh()->status,
+        );
+        $this->assertSame($attachment->id, $response->json('attachment_id'));
+        Storage::disk('local')->assertExists($attachment->path);
+        $this->assertSame('ABCDEFGH', Storage::disk('local')->get($attachment->path));
+        $this->actingAs($consultant)
+            ->get("/presentations/{$presentation->id}/attachments/{$attachment->id}/view")
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+        $this->actingAs($consultant)
+            ->withHeader('Range', 'bytes=0-3')
+            ->get("/presentations/{$presentation->id}/attachments/{$attachment->id}/view")
+            ->assertStatus(206)
+            ->assertHeader('content-range', 'bytes 0-3/8');
+    }
+
+    public function test_chunked_upload_can_resume_and_enforces_presentation_quotas(): void
+    {
+        config(['presentations.chunk_size' => 4]);
+        $employee = $this->userWithRole('Сотрудник');
+        $presentation = Presentation::create([
+            'title' => 'Большая презентация',
+            'source_type' => 'collection',
+            'uploaded_by' => $employee->id,
+        ]);
+        $payload = [
+            'name' => 'video.mp4',
+            'size' => 8,
+            'mime_type' => 'video/mp4',
+            'last_modified' => 456,
+        ];
+
+        $first = $this->actingAs($employee)
+            ->postJson("/presentations/{$presentation->id}/uploads", $payload)
+            ->assertOk();
+
+        $attachment = PresentationAttachment::firstOrFail();
+        $this->putChunk(
+            $employee,
+            "/presentations/{$presentation->id}/uploads/{$attachment->id}/chunks/0",
+            'ABCD',
+        )->assertOk();
+        $second = $this->actingAs($employee)
+            ->postJson("/presentations/{$presentation->id}/uploads", $payload)
+            ->assertOk()
+            ->assertJsonPath('uploaded_chunks', [0]);
+
+        $this->assertSame($first->json('attachment_id'), $second->json('attachment_id'));
+        $this->assertDatabaseCount('presentation_attachments', 1);
+        $this->putChunk(
+            $employee,
+            "/presentations/{$presentation->id}/uploads/{$attachment->id}/chunks/1",
+            'EFGH',
+        )->assertOk();
+        $this->actingAs($employee)
+            ->postJson("/presentations/{$presentation->id}/uploads/{$attachment->id}/complete")
+            ->assertOk();
+
+        foreach (range(1, config('presentations.max_attachments') - 1) as $index) {
+            $presentation->attachments()->create([
+                'presentation_id' => $presentation->id,
+                'uploaded_by' => $employee->id,
+                'kind' => 'link',
+                'media_type' => 'link',
+                'display_name' => "Ссылка {$index}",
+                'url' => "https://example.com/{$index}",
+                'status' => 'ready',
+                'size' => 0,
+            ]);
+        }
+
+        $this->actingAs($employee)
+            ->postJson("/presentations/{$presentation->id}/uploads", [
+                'name' => 'extra.pdf',
+                'size' => 1024,
+                'mime_type' => 'application/pdf',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('attachments');
+    }
+
+    public function test_presentation_upload_enforces_total_size_quota(): void
+    {
+        $employee = $this->userWithRole('Сотрудник');
+        $presentation = Presentation::create([
+            'title' => 'Заполненная презентация',
+            'source_type' => 'collection',
+            'uploaded_by' => $employee->id,
+        ]);
+        $presentation->attachments()->create([
+            'uploaded_by' => $employee->id,
+            'kind' => 'file',
+            'media_type' => 'video',
+            'display_name' => 'existing.mp4',
+            'size' => config('presentations.max_total_size'),
+            'status' => 'ready',
+        ]);
+
+        $this->actingAs($employee)
+            ->postJson("/presentations/{$presentation->id}/uploads", [
+                'name' => 'extra.pdf',
+                'size' => 1,
+                'mime_type' => 'application/pdf',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('size');
+    }
+
+    public function test_expired_chunked_uploads_are_cleaned_from_server(): void
+    {
+        config(['presentations.chunk_size' => 4]);
+        $employee = $this->userWithRole('Сотрудник');
+        $presentation = Presentation::create([
+            'title' => 'Незавершённая презентация',
+            'source_type' => 'collection',
+            'uploaded_by' => $employee->id,
+        ]);
+        $response = $this->actingAs($employee)
+            ->postJson("/presentations/{$presentation->id}/uploads", [
+                'name' => 'draft.pdf',
+                'size' => 4,
+                'mime_type' => 'application/pdf',
+            ])
+            ->assertOk();
+        $attachment = PresentationAttachment::findOrFail(
+            $response->json('attachment_id'),
+        );
+        $this->putChunk(
+            $employee,
+            "/presentations/{$presentation->id}/uploads/{$attachment->id}/chunks/0",
+            'ABCD',
+        )->assertOk();
+        $attachment->update(['expires_at' => now()->subMinute()]);
+
+        $this->artisan('presentations:cleanup-uploads')->assertSuccessful();
+
+        $this->assertSame(
+            PresentationAttachment::STATUS_FAILED,
+            $attachment->fresh()->status,
+        );
+        Storage::disk('local')->assertMissing(
+            "presentation-upload-chunks/{$attachment->id}/payload.part",
+        );
     }
 
     public function test_project_visibility_is_limited_to_manager_and_assigned_members(): void
@@ -253,6 +483,24 @@ class CrmModulesTest extends TestCase
             'password_confirmation' => 'password',
         ])->assertRedirect('/dashboard');
         $this->assertTrue(User::where('email', 'second@example.com')->firstOrFail()->hasRole('Сотрудник'));
+    }
+
+    private function putChunk(User $user, string $url, string $content): TestResponse
+    {
+        return $this->actingAs($user)->call(
+            'PUT',
+            $url,
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/octet-stream',
+                'CONTENT_LENGTH' => (string) strlen($content),
+                'HTTP_ACCEPT' => 'application/json',
+                'HTTP_X_REQUESTED_WITH' => 'XMLHttpRequest',
+            ],
+            $content,
+        );
     }
 
     private function userWithRole(string $roleName, ?User $manager = null): User
