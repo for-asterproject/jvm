@@ -17,7 +17,7 @@ import AppLogoIcon from './app-logo-icon';
 
 const mainNavItems: NavItem[] = [
     {
-        title: 'Панель управления',
+        title: 'Прайс Лист',
         href: '/dashboard',
         role: '',
         icon: LayoutGrid,

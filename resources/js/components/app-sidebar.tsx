@@ -32,7 +32,7 @@ export function AppSidebar() {
     const mainNavItems: NavItem[] = [
         ...(permissions?.isAdministrator ? [{ title: 'Админ панель', href: '/adminpanel', icon: ShieldCheck, role: 'Администратор' }] : []),
         ...(roles.includes('Бухгалтер') ? [{ title: 'Бухгалтерия', href: '/productsmanagment', icon: CircleDollarSign, role: 'Бухгалтер' }] : []),
-        { title: 'Прайс лист', href: '/dashboard', icon: LayoutGrid, role: '' },
+        { title: 'Прайс Лист', href: '/dashboard', icon: LayoutGrid, role: '' },
         ...(permissions?.hasCrmAccess
             ? [
                   { title: 'Презентации', href: '/presentations', icon: FileSliders, role: '' },

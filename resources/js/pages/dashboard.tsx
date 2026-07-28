@@ -1,4 +1,3 @@
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -15,7 +14,6 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { useUser } from '@/components/UserContext';
 import React, { useEffect, useState } from 'react';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { Page, Text, View, Document, pdf, StyleSheet, Font, Image } from '@react-pdf/renderer';
@@ -24,7 +22,7 @@ import { saveAs } from 'file-saver';
 // Хлебные крошки
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Прайс-лист',
+        title: 'Прайс Лист',
         href: '/dashboard',
     },
 ];
@@ -51,11 +49,6 @@ interface Product {
     price_with_vat_KZT_currency: number;
 }
 
-interface User {
-    name: string;
-    email?: string;
-}
-
 interface CompanyDetails {
     formatted_details: string;
     vat_rate: number;
@@ -63,7 +56,6 @@ interface CompanyDetails {
 
 interface InvoicePDFProps {
     items: InvoiceItem[];
-    user: User;
     companyDetails: string;
     recipient: string;
     director: string;
@@ -429,65 +421,8 @@ const formatAmount = (value: number) => {
         .replace(/[\u00A0\u202F]/g, ' ');
 };
 
-// Компонент PDF
-const CommercialOfferPDF: React.FC<{ selectedProducts: Product[]; user: User; exchangeRateUSD: number; companyDetails: string; vatRate: number }> = ({ selectedProducts, user, exchangeRateUSD, companyDetails, vatRate }) => {
-    const totalWithoutVatUsd = selectedProducts.reduce((sum, product) => sum + product.price_USD_currency, 0);
-    const totalWithoutVatKzt = selectedProducts.reduce((sum, product) => sum + product.price_KZT_currency, 0);
-    const totalVatKzt = selectedProducts.reduce((sum, product) => sum + product.vat_amount_KZT_currency, 0);
-    const totalWithVatKzt = selectedProducts.reduce((sum, product) => sum + product.price_with_vat_KZT_currency, 0);
-
-    return (
-        <Document>
-            <Page size="A4" style={styles.page}>
-                <Image style={styles.logo} src="/aster-logo.png" />
-                <Text style={styles.dateRow}>{companyDetails}</Text>
-                <Text style={styles.header}>Коммерческое предложение</Text>
-                <View style={styles.dateRow}>
-                    <Text>Дата: {new Date().toLocaleDateString()}</Text>
-                    <Text>Курс USD: {exchangeRateUSD}</Text>
-                </View>
-                <Text style={{ marginBottom: 10 }}>Ставка НДС: {vatRate}%</Text>
-                <View style={styles.table}>
-                    <View style={styles.tableRow}>
-                        <Text style={[styles.tableColID, styles.tableHeader]}>ID</Text>
-                        <Text style={[styles.tableColName, styles.tableHeader]}>Название</Text>
-                        <Text style={[styles.tableCol, styles.tableHeader]}>Без НДС (USD)</Text>
-                        <Text style={[styles.tableCol, styles.tableHeader]}>С НДС (KZT)</Text>
-                    </View>
-                    {selectedProducts.map((product) => (
-                        <View key={product.id} style={styles.tableRow}>
-                            <Text style={styles.tableColID}>{product.id}</Text>
-                            <Text style={styles.tableColName}>{product.name}</Text>
-                            <Text style={styles.tableCol}>{formatAmount(product.price_USD_currency)} USD</Text>
-                            <Text style={styles.tableCol}>{formatAmount(product.price_with_vat_KZT_currency)} KZT</Text>
-                        </View>
-                    ))}
-                </View>
-                <View style={styles.summaryBlock}>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Итого без НДС:</Text>
-                        <Text>{formatAmount(totalWithoutVatUsd)} USD / {formatAmount(totalWithoutVatKzt)} KZT</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Итого НДС:</Text>
-                        <Text>{formatAmount(totalVatKzt)} KZT</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Итого с НДС:</Text>
-                        <Text>{formatAmount(totalWithVatKzt)} KZT</Text>
-                    </View>
-                </View>
-                <Text style={styles.footer}>
-                    Предложение подготовил: {user.name} {"(" + user.email + ")"}
-                </Text>
-            </Page>
-        </Document>
-    );
-};
-
 const InvoicePDF: React.FC<InvoicePDFProps> = ({
     items,
-    user,
     companyDetails,
     recipient,
     director,
@@ -675,7 +610,6 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({
 
 // Главный компонент Dashboard
 export default function Dashboard() {
-    const { user } = useUser();
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
     const [exchangeRateUSD, setExchangeRateUSD] = useState<number | null>(null);
@@ -693,6 +627,8 @@ export default function Dashboard() {
     const [invoiceIncludeVat, setInvoiceIncludeVat] = useState<boolean>(true);
     const [invoiceNumber, setInvoiceNumber] = useState<string>('');
     const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
+    const [isInvoiceGenerating, setIsInvoiceGenerating] = useState<boolean>(false);
+    const [pdfError, setPdfError] = useState<string>('');
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -745,24 +681,12 @@ export default function Dashboard() {
         { field: 'price_with_vat_KZT_currency', headerName: 'С НДС (KZT)', type: 'number', width: 150 },
     ];
 
-    const handleDownload = async () => {
-        if (!user || filteredProducts.length === 0 || !exchangeRateUSD) return;
-
-        const blob = await pdf(
-            <CommercialOfferPDF
-                selectedProducts={filteredProducts}
-                user={user}
-                exchangeRateUSD={exchangeRateUSD}
-                companyDetails={companyDetails}
-                vatRate={vatRate}
-            />
-        ).toBlob();
-
-        saveAs(blob, 'Commercial_Offer_Aster_Project.pdf');
-    };
-
     const handleInvoiceDialogOpen = (open: boolean) => {
         setIsInvoiceDialogOpen(open);
+
+        if (open) {
+            setPdfError('');
+        }
 
         if (open && !invoiceNumber) {
             const generatedNumber = `${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
@@ -805,33 +729,42 @@ export default function Dashboard() {
     };
 
     const handleInvoiceDownload = async () => {
-        if (!user || filteredProducts.length === 0 || !invoiceRecipient.trim() || invoiceItems.length === 0) {
+        if (filteredProducts.length === 0 || !invoiceRecipient.trim() || invoiceItems.length === 0) {
             return;
         }
 
-        const invoiceDate = new Date().toLocaleDateString('ru-RU');
-        const blob = await pdf(
-            <InvoicePDF
-                items={invoiceItems}
-                user={user}
-                companyDetails={companyDetails}
-                recipient={invoiceRecipient}
-                director={invoiceDirector}
-                address={invoiceAddress}
-                phone={invoicePhone}
-                originPoint={invoiceOriginPoint}
-                deliveryPoint={invoiceDeliveryPoint}
-                supplyTerms={invoiceSupplyTerms}
-                prepaymentPercent={invoicePrepaymentPercent}
-                includeVat={invoiceIncludeVat}
-                vatRate={vatRate}
-                invoiceNumber={invoiceNumber || `${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`}
-                invoiceDate={invoiceDate}
-            />
-        ).toBlob();
+        setPdfError('');
+        setIsInvoiceGenerating(true);
 
-        saveAs(blob, `Invoice_${invoiceNumber || 'draft'}.pdf`);
-        setIsInvoiceDialogOpen(false);
+        try {
+            const invoiceDate = new Date().toLocaleDateString('ru-RU');
+            const blob = await pdf(
+                <InvoicePDF
+                    items={invoiceItems}
+                    companyDetails={companyDetails}
+                    recipient={invoiceRecipient}
+                    director={invoiceDirector}
+                    address={invoiceAddress}
+                    phone={invoicePhone}
+                    originPoint={invoiceOriginPoint}
+                    deliveryPoint={invoiceDeliveryPoint}
+                    supplyTerms={invoiceSupplyTerms}
+                    prepaymentPercent={invoicePrepaymentPercent}
+                    includeVat={invoiceIncludeVat}
+                    vatRate={vatRate}
+                    invoiceNumber={invoiceNumber || `${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`}
+                    invoiceDate={invoiceDate}
+                />,
+            ).toBlob();
+
+            saveAs(blob, `Invoice_${invoiceNumber || 'draft'}.pdf`);
+            setIsInvoiceDialogOpen(false);
+        } catch (error) {
+            console.error('Ошибка при формировании ценового предложения:', error);
+            setPdfError('Не удалось сформировать PDF. Попробуйте ещё раз.');
+        } finally {
+            setIsInvoiceGenerating(false);
+        }
     };
 
     const invoiceSubtotal = invoiceItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -840,7 +773,7 @@ export default function Dashboard() {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Панель управления" />
+            <Head title="Прайс Лист" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Отображение текущего курса USD */}
                 <div className="flex justify-end items-center">
@@ -859,7 +792,7 @@ export default function Dashboard() {
                                 <Button
                                     type="button"
                                     onClick={() => handleInvoiceDialogOpen(true)}
-                                    disabled={filteredProducts.length === 0 }
+                                    disabled={filteredProducts.length === 0}
                                     className="bg-orange-600 text-white shadow-sm hover:bg-orange-700"
                                 >
                                     Ценовое предложение
@@ -1065,6 +998,12 @@ export default function Dashboard() {
                             </div>
                         </div>
 
+                        {pdfError ? (
+                            <p className="mt-3 text-sm text-red-600" role="alert">
+                                {pdfError}
+                            </p>
+                        ) : null}
+
                         <DialogFooter className="mt-4 shrink-0 border-t bg-background pt-4 sm:justify-end">
                             <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => handleInvoiceDialogOpen(false)}>
                                 Отмена
@@ -1073,9 +1012,9 @@ export default function Dashboard() {
                                 type="button"
                                 className="w-full sm:w-auto"
                                 onClick={handleInvoiceDownload}
-                                disabled={filteredProducts.length === 0 || !invoiceRecipient.trim()}
+                                disabled={filteredProducts.length === 0 || !invoiceRecipient.trim() || isInvoiceGenerating}
                             >
-                                Скачать PDF
+                                {isInvoiceGenerating ? 'Формирование...' : 'Скачать PDF'}
                             </Button>
                         </DialogFooter>
                     </div>
