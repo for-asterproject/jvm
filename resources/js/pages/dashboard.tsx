@@ -24,7 +24,7 @@ import { saveAs } from 'file-saver';
 // Хлебные крошки
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Панель управления',
+        title: 'Прайс-лист',
         href: '/dashboard',
     },
 ];
@@ -605,7 +605,7 @@ const InvoicePDF: React.FC<InvoicePDFProps> = ({
                         <Text style={styles.invoiceInfoHeaderCell}>Пункт доставки</Text>
                         <Text style={[styles.invoiceInfoHeaderCell, { borderRightWidth: 0 }]}>Условия поставки</Text>
                     </View>
-                    <View style={[styles.invoiceInfoRow, { borderBottomWidth: 0 }]}> 
+                    <View style={[styles.invoiceInfoRow, { borderBottomWidth: 0 }]}>
                         <Text style={styles.invoiceInfoValueCell}>JVM Сеул</Text>
                         <Text style={styles.invoiceInfoValueCell}>Официальный представитель Aster Project</Text>
                         <Text style={styles.invoiceInfoValueCell}>{recipientLines[0] ?? recipient}</Text>
@@ -859,7 +859,7 @@ export default function Dashboard() {
                                 <Button
                                     type="button"
                                     onClick={() => handleInvoiceDialogOpen(true)}
-                                    disabled={filteredProducts.length === 0 || !user}
+                                    disabled={filteredProducts.length === 0 }
                                     className="bg-orange-600 text-white shadow-sm hover:bg-orange-700"
                                 >
                                     Ценовое предложение
