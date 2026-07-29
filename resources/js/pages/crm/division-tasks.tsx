@@ -281,7 +281,7 @@ export default function DivisionTasks({
                 </CrmStatsGrid>
 
                 <CrmToolbar>
-                    <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(15rem,1fr)_11rem_11rem_12rem_12rem_auto] xl:items-center">
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(13rem,1fr)_9.5rem_9.5rem_11rem_11rem_auto] 2xl:items-center">
                         <div className="relative">
                             <Search className="absolute top-2.5 left-3 size-4 text-slate-400" />
                             <Input
@@ -294,7 +294,7 @@ export default function DivisionTasks({
                         <select
                             value={statusFilter}
                             onChange={(event) => setStatusFilter(event.target.value)}
-                            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                            className="border-input bg-background h-9 min-w-0 rounded-md border px-3 text-sm"
                         >
                             <option value="all">Все статусы</option>
                             {columns.map((column) => (
@@ -306,7 +306,7 @@ export default function DivisionTasks({
                         <select
                             value={priorityFilter}
                             onChange={(event) => setPriorityFilter(event.target.value)}
-                            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                            className="border-input bg-background h-9 min-w-0 rounded-md border px-3 text-sm"
                         >
                             <option value="all">Все приоритеты</option>
                             {Object.entries(priorityLabels).map(([value, label]) => (
@@ -318,7 +318,7 @@ export default function DivisionTasks({
                         <select
                             value={assigneeFilter}
                             onChange={(event) => setAssigneeFilter(event.target.value)}
-                            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                            className="border-input bg-background h-9 min-w-0 rounded-md border px-3 text-sm"
                         >
                             <option value="all">Все исполнители</option>
                             {visibleAssignees.map((assignee) => (
@@ -330,7 +330,7 @@ export default function DivisionTasks({
                         <select
                             value={projectFilter}
                             onChange={(event) => setProjectFilter(event.target.value)}
-                            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                            className="border-input bg-background h-9 min-w-0 rounded-md border px-3 text-sm"
                         >
                             <option value="all">Все проекты</option>
                             <option value="none">Без проекта</option>
@@ -340,13 +340,13 @@ export default function DivisionTasks({
                                 </option>
                             ))}
                         </select>
-                        <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-white/10 dark:bg-white/5">
+                        <div className="flex min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-1 sm:col-span-2 xl:col-span-1 dark:border-white/10 dark:bg-white/5">
                             <Button
                                 type="button"
                                 size="sm"
                                 variant={view === 'list' ? 'default' : 'ghost'}
                                 onClick={() => setView('list')}
-                                className="h-7 px-2.5"
+                                className="h-7 min-w-0 flex-1 px-2.5"
                             >
                                 <List className="size-3.5" />
                                 Список
@@ -356,7 +356,7 @@ export default function DivisionTasks({
                                 size="sm"
                                 variant={view === 'kanban' ? 'default' : 'ghost'}
                                 onClick={() => setView('kanban')}
-                                className="h-7 px-2.5"
+                                className="h-7 min-w-0 flex-1 px-2.5"
                             >
                                 <KanbanSquare className="size-3.5" />
                                 Канбан
@@ -368,78 +368,148 @@ export default function DivisionTasks({
                 {filteredTasks.length === 0 ? (
                     <EmptyState title="Задачи не найдены">Создайте первую задачу или измените выбранные фильтры.</EmptyState>
                 ) : view === 'list' ? (
-                    <CrmSurface className="overflow-x-auto">
-                        <table className="w-full min-w-[920px] text-left text-sm">
-                            <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-white/8 dark:bg-white/[0.025]">
-                                <tr>
-                                    <th className="px-5 py-3">Задача</th>
-                                    <th className="px-4 py-3">Проект</th>
-                                    <th className="px-4 py-3">Исполнитель</th>
-                                    <th className="px-4 py-3">Статус</th>
-                                    <th className="px-4 py-3">Приоритет</th>
-                                    <th className="px-4 py-3">Срок</th>
-                                    <th className="px-4 py-3 text-center">Комментарии</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-white/6">
-                                {filteredTasks.map((task) => (
-                                    <tr
-                                        key={task.id}
-                                        onClick={() => openDetails(task)}
-                                        className="cursor-pointer transition hover:bg-blue-50/50 dark:hover:bg-blue-500/[0.035]"
-                                    >
-                                        <td className="max-w-sm px-5 py-4">
-                                            <div className="font-semibold text-slate-900 dark:text-white">{task.title}</div>
-                                            {task.description && <div className="mt-1 line-clamp-1 text-xs text-slate-500">{task.description}</div>}
-                                        </td>
-                                        <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{task.project?.name ?? 'Без проекта'}</td>
-                                        <td className="px-4 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <CrmAvatar name={task.assignee.name} className="size-7 rounded-lg" />
-                                                <span className="max-w-36 truncate text-slate-700 dark:text-slate-200">{task.assignee.name}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-4">
-                                            {task.can_change_status ? (
-                                                <select
-                                                    value={task.status}
-                                                    onClick={(event) => event.stopPropagation()}
-                                                    onChange={(event) => changeStatus(task, event.target.value as TaskStatus)}
-                                                    className="border-input bg-background h-8 rounded-md border px-2 text-xs"
-                                                >
-                                                    {columns.map((column) => (
-                                                        <option key={column.value} value={column.value}>
-                                                            {column.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            ) : (
-                                                statusBadge(task)
+                    <CrmSurface>
+                        <div className="divide-y divide-slate-100 xl:hidden dark:divide-white/6">
+                            {filteredTasks.map((task) => (
+                                <article
+                                    key={task.id}
+                                    onClick={() => openDetails(task)}
+                                    className="cursor-pointer p-4 transition hover:bg-blue-50/50 sm:p-5 dark:hover:bg-blue-500/[0.035]"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <h3 className="font-semibold text-slate-900 dark:text-white">{task.title}</h3>
+                                            {task.description && (
+                                                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{task.description}</p>
                                             )}
-                                        </td>
-                                        <td className="px-4 py-4">
-                                            <Badge variant="outline" className={priorityClasses[task.priority]}>
-                                                {priorityLabels[task.priority]}
-                                            </Badge>
-                                        </td>
-                                        <td
-                                            className={`px-4 py-4 whitespace-nowrap ${taskIsOverdue(task) ? 'font-semibold text-rose-600 dark:text-rose-300' : 'text-slate-600 dark:text-slate-300'}`}
+                                        </div>
+                                        <Badge variant="outline" className={`shrink-0 ${priorityClasses[task.priority]}`}>
+                                            {priorityLabels[task.priority]}
+                                        </Badge>
+                                    </div>
+                                    <div className="mt-3 text-xs font-medium text-blue-600 dark:text-blue-300">
+                                        {task.project?.name ?? 'Без проекта'}
+                                    </div>
+                                    <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            <CrmAvatar name={task.assignee.name} className="size-7 rounded-lg" />
+                                            <span className="truncate text-sm text-slate-700 dark:text-slate-200">{task.assignee.name}</span>
+                                        </div>
+                                        <span
+                                            className={`flex items-center gap-1.5 text-xs ${
+                                                taskIsOverdue(task)
+                                                    ? 'font-semibold text-rose-600 dark:text-rose-300'
+                                                    : 'text-slate-500 dark:text-slate-400'
+                                            }`}
                                         >
+                                            <CalendarClock className="size-3.5" />
                                             {formatDate(task.due_date)}
-                                        </td>
-                                        <td className="px-4 py-4 text-center text-slate-500">
-                                            <span className="inline-flex items-center gap-1">
-                                                <MessageSquare className="size-3.5" />
-                                                {task.comments.length}
-                                            </span>
-                                        </td>
+                                        </span>
+                                        <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                            <MessageSquare className="size-3.5" />
+                                            {task.comments.length}
+                                        </span>
+                                    </div>
+                                    <div className="mt-4 border-t border-slate-100 pt-3 dark:border-white/6">
+                                        {task.can_change_status ? (
+                                            <select
+                                                value={task.status}
+                                                onClick={(event) => event.stopPropagation()}
+                                                onChange={(event) => changeStatus(task, event.target.value as TaskStatus)}
+                                                className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm sm:w-auto"
+                                            >
+                                                {columns.map((column) => (
+                                                    <option key={column.value} value={column.value}>
+                                                        {column.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            statusBadge(task)
+                                        )}
+                                    </div>
+                                </article>
+                            ))}
+                        </div>
+                        <div className="hidden overflow-x-auto xl:block">
+                            <table className="w-full min-w-[920px] text-left text-sm">
+                                <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-white/8 dark:bg-white/[0.025]">
+                                    <tr>
+                                        <th className="px-5 py-3">Задача</th>
+                                        <th className="px-4 py-3">Проект</th>
+                                        <th className="px-4 py-3">Исполнитель</th>
+                                        <th className="px-4 py-3">Статус</th>
+                                        <th className="px-4 py-3">Приоритет</th>
+                                        <th className="px-4 py-3">Срок</th>
+                                        <th className="px-4 py-3 text-center">Комментарии</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-white/6">
+                                    {filteredTasks.map((task) => (
+                                        <tr
+                                            key={task.id}
+                                            onClick={() => openDetails(task)}
+                                            className="cursor-pointer transition hover:bg-blue-50/50 dark:hover:bg-blue-500/[0.035]"
+                                        >
+                                            <td className="max-w-sm px-5 py-4">
+                                                <div className="font-semibold text-slate-900 dark:text-white">{task.title}</div>
+                                                {task.description && (
+                                                    <div className="mt-1 line-clamp-1 text-xs text-slate-500">{task.description}</div>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{task.project?.name ?? 'Без проекта'}</td>
+                                            <td className="px-4 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <CrmAvatar name={task.assignee.name} className="size-7 rounded-lg" />
+                                                    <span className="max-w-36 truncate text-slate-700 dark:text-slate-200">{task.assignee.name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                {task.can_change_status ? (
+                                                    <select
+                                                        value={task.status}
+                                                        onClick={(event) => event.stopPropagation()}
+                                                        onChange={(event) => changeStatus(task, event.target.value as TaskStatus)}
+                                                        className="border-input bg-background h-8 rounded-md border px-2 text-xs"
+                                                    >
+                                                        {columns.map((column) => (
+                                                            <option key={column.value} value={column.value}>
+                                                                {column.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    statusBadge(task)
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                <Badge variant="outline" className={priorityClasses[task.priority]}>
+                                                    {priorityLabels[task.priority]}
+                                                </Badge>
+                                            </td>
+                                            <td
+                                                className={`px-4 py-4 whitespace-nowrap ${
+                                                    taskIsOverdue(task)
+                                                        ? 'font-semibold text-rose-600 dark:text-rose-300'
+                                                        : 'text-slate-600 dark:text-slate-300'
+                                                }`}
+                                            >
+                                                {formatDate(task.due_date)}
+                                            </td>
+                                            <td className="px-4 py-4 text-center text-slate-500">
+                                                <span className="inline-flex items-center gap-1">
+                                                    <MessageSquare className="size-3.5" />
+                                                    {task.comments.length}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </CrmSurface>
                 ) : (
-                    <div className="crm-scrollbar grid min-w-0 auto-cols-[minmax(280px,1fr)] grid-flow-col gap-4 overflow-x-auto pb-2 xl:grid-flow-row xl:grid-cols-4 xl:overflow-visible">
+                    <div className="crm-scrollbar grid min-w-0 auto-cols-[minmax(280px,1fr)] grid-flow-col gap-4 overflow-x-auto pb-2 2xl:grid-flow-row 2xl:grid-cols-4 2xl:overflow-visible">
                         {columns.map((column) => {
                             const columnTasks = filteredTasks.filter((task) => task.status === column.value);
                             const isDragTarget = dragOverStatus === column.value;
