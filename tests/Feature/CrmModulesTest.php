@@ -8,6 +8,9 @@ use App\Models\PresentationAttachment;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\Task;
+use App\Models\TaskAssignment;
+use App\Models\TaskReport;
+use App\Models\TaskReportAttachment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -519,6 +522,195 @@ class CrmModulesTest extends TestCase
             'task_id' => $task->id,
             'user_id' => $secondEmployee->id,
         ]);
+    }
+
+    public function test_each_assignee_submits_an_individual_report_for_creator_review(): void
+    {
+        $manager = $this->userWithRole('Руководитель');
+        $firstEmployee = $this->userWithRole('Сотрудник', $manager);
+        $secondEmployee = $this->userWithRole('Сотрудник', $manager);
+
+        $this->actingAs($manager)
+            ->post('/tasks', $this->standaloneTaskPayload($firstEmployee, [
+                'assignee_id' => null,
+                'assignee_ids' => [$firstEmployee->id, $secondEmployee->id],
+                'status' => 'done',
+            ]))
+            ->assertRedirect();
+
+        $task = Task::firstOrFail();
+        $this->assertSame('planned', $task->status);
+        $this->actingAs($manager)
+            ->postJson("/tasks/{$task->id}/start")
+            ->assertForbidden();
+        $this->actingAs($firstEmployee)
+            ->postJson("/tasks/{$task->id}/start")
+            ->assertOk();
+        $this->actingAs($secondEmployee)
+            ->postJson("/tasks/{$task->id}/start")
+            ->assertOk();
+        $this->actingAs($manager)
+            ->put("/tasks/{$task->id}", $this->standaloneTaskPayload($secondEmployee, [
+                'assignee_id' => null,
+                'assignee_ids' => [$secondEmployee->id],
+            ]))
+            ->assertSessionHasErrors('assignee_ids');
+
+        $this->actingAs($firstEmployee)
+            ->postJson("/tasks/{$task->id}/reports", ['body' => ''])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('body');
+
+        $firstReportResponse = $this->actingAs($firstEmployee)
+            ->postJson("/tasks/{$task->id}/reports", [
+                'body' => 'Подготовил документы и проверил реквизиты.',
+            ])
+            ->assertCreated();
+        $secondReportResponse = $this->actingAs($secondEmployee)
+            ->postJson("/tasks/{$task->id}/reports", [
+                'body' => 'Согласовал итоговый комплект документов.',
+            ])
+            ->assertCreated();
+
+        $firstReport = TaskReport::findOrFail($firstReportResponse->json('report_id'));
+        $secondReport = TaskReport::findOrFail($secondReportResponse->json('report_id'));
+        $this->assertSame('review', $task->fresh()->status);
+        $this->assertDatabaseHas('task_user', [
+            'task_id' => $task->id,
+            'user_id' => $firstEmployee->id,
+            'status' => TaskAssignment::STATUS_REVIEW,
+        ]);
+
+        $this->actingAs($firstEmployee)
+            ->patchJson("/tasks/{$task->id}/reports/{$firstReport->id}/accept")
+            ->assertForbidden();
+        $this->actingAs($manager)
+            ->patchJson("/tasks/{$task->id}/reports/{$firstReport->id}/revision", [
+                'comment' => '',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('comment');
+        $this->actingAs($manager)
+            ->patchJson("/tasks/{$task->id}/reports/{$firstReport->id}/revision", [
+                'comment' => 'Добавьте подтверждение отправки.',
+            ])
+            ->assertOk();
+        $this->assertSame('needs_revision', $task->fresh()->status);
+
+        $revisedReportResponse = $this->actingAs($firstEmployee)
+            ->postJson("/tasks/{$task->id}/reports", [
+                'body' => 'Добавил подтверждение отправки комплекта.',
+            ])
+            ->assertCreated();
+        $revisedReport = TaskReport::findOrFail($revisedReportResponse->json('report_id'));
+
+        $this->actingAs($manager)
+            ->patchJson("/tasks/{$task->id}/reports/{$revisedReport->id}/accept")
+            ->assertOk();
+        $this->assertSame('review', $task->fresh()->status);
+        $this->actingAs($manager)
+            ->patchJson("/tasks/{$task->id}/reports/{$secondReport->id}/accept")
+            ->assertOk();
+        $this->assertSame('done', $task->fresh()->status);
+        $this->assertDatabaseCount('task_reports', 3);
+
+        $this->actingAs($firstEmployee)
+            ->getJson("/tasks/{$task->id}/workflow")
+            ->assertOk()
+            ->assertJsonCount(2, 'task.assignments')
+            ->assertJsonCount(2, 'task.assignments.0.reports');
+    }
+
+    public function test_task_report_attachment_is_chunked_private_and_attached_to_report(): void
+    {
+        config(['task_reports.chunk_size' => 4]);
+        $manager = $this->userWithRole('Руководитель');
+        $employee = $this->userWithRole('Сотрудник', $manager);
+        $outsider = $this->userWithRole('Сотрудник');
+
+        $this->actingAs($manager)
+            ->post('/tasks', $this->standaloneTaskPayload($employee))
+            ->assertRedirect();
+        $task = Task::firstOrFail();
+        $this->actingAs($employee)->postJson("/tasks/{$task->id}/start")->assertOk();
+
+        $upload = $this->actingAs($employee)
+            ->postJson("/tasks/{$task->id}/report-uploads", [
+                'name' => 'report.pdf',
+                'size' => 8,
+                'mime_type' => 'application/pdf',
+                'last_modified' => 123,
+            ])
+            ->assertOk()
+            ->assertJsonPath('total_chunks', 2);
+        $attachment = TaskReportAttachment::findOrFail($upload->json('attachment_id'));
+        $this->putChunk(
+            $employee,
+            "/tasks/{$task->id}/report-uploads/{$attachment->id}/chunks/0",
+            'ABCD',
+        )->assertOk();
+        $this->putChunk(
+            $employee,
+            "/tasks/{$task->id}/report-uploads/{$attachment->id}/chunks/1",
+            'EFGH',
+        )->assertOk();
+        $this->actingAs($employee)
+            ->postJson("/tasks/{$task->id}/report-uploads/{$attachment->id}/complete")
+            ->assertOk();
+
+        $report = $this->actingAs($employee)
+            ->postJson("/tasks/{$task->id}/reports", [
+                'body' => 'Отчёт с приложенным документом.',
+                'attachment_ids' => [$attachment->id],
+            ])
+            ->assertCreated();
+        $attachment->refresh();
+
+        $this->assertSame($report->json('report_id'), $attachment->task_report_id);
+        $this->assertNull($attachment->expires_at);
+        Storage::disk('local')->assertExists($attachment->path);
+        $this->assertSame('ABCDEFGH', Storage::disk('local')->get($attachment->path));
+        $this->actingAs($outsider)
+            ->get("/tasks/{$task->id}/report-attachments/{$attachment->id}/view")
+            ->assertForbidden();
+        $this->actingAs($employee)
+            ->get("/tasks/{$task->id}/report-attachments/{$attachment->id}/view")
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_expired_unsubmitted_task_report_upload_is_deleted(): void
+    {
+        config(['task_reports.chunk_size' => 4]);
+        $manager = $this->userWithRole('Руководитель');
+        $employee = $this->userWithRole('Сотрудник', $manager);
+
+        $this->actingAs($manager)
+            ->post('/tasks', $this->standaloneTaskPayload($employee))
+            ->assertRedirect();
+        $task = Task::firstOrFail();
+        $this->actingAs($employee)->postJson("/tasks/{$task->id}/start")->assertOk();
+        $upload = $this->actingAs($employee)
+            ->postJson("/tasks/{$task->id}/report-uploads", [
+                'name' => 'draft.pdf',
+                'size' => 4,
+                'mime_type' => 'application/pdf',
+            ])
+            ->assertOk();
+        $attachment = TaskReportAttachment::findOrFail($upload->json('attachment_id'));
+        $this->putChunk(
+            $employee,
+            "/tasks/{$task->id}/report-uploads/{$attachment->id}/chunks/0",
+            'ABCD',
+        )->assertOk();
+        $attachment->update(['expires_at' => now()->subMinute()]);
+
+        $this->artisan('tasks:cleanup-report-uploads')->assertSuccessful();
+
+        $this->assertDatabaseMissing('task_report_attachments', ['id' => $attachment->id]);
+        Storage::disk('local')->assertMissing(
+            "task-report-upload-chunks/{$attachment->id}/payload.part",
+        );
     }
 
     public function test_all_project_task_assignees_must_participate_in_project(): void

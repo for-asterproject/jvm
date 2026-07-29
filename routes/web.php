@@ -11,6 +11,8 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\TaskReportUploadController;
+use App\Http\Controllers\TaskWorkflowController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -81,6 +83,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');
     Route::patch('/tasks/{task}/status', [TaskController::class, 'updateStatus'])->name('tasks.status');
     Route::post('/tasks/{task}/comments', [TaskController::class, 'comment'])->name('tasks.comments.store');
+    Route::get('/tasks/{task}/workflow', [TaskWorkflowController::class, 'show'])->name('tasks.workflow.show');
+    Route::post('/tasks/{task}/start', [TaskWorkflowController::class, 'start'])->name('tasks.workflow.start');
+    Route::post('/tasks/{task}/reports', [TaskWorkflowController::class, 'submit'])->name('tasks.reports.store');
+    Route::patch('/tasks/{task}/reports/{report}/accept', [TaskWorkflowController::class, 'accept'])->name('tasks.reports.accept');
+    Route::patch('/tasks/{task}/reports/{report}/revision', [TaskWorkflowController::class, 'revision'])->name('tasks.reports.revision');
+    Route::post('/tasks/{task}/report-uploads', [TaskReportUploadController::class, 'store'])->name('tasks.report-uploads.store');
+    Route::put('/tasks/{task}/report-uploads/{attachment}/chunks/{chunkIndex}', [TaskReportUploadController::class, 'storeChunk'])->whereNumber('chunkIndex')->name('tasks.report-uploads.chunks.store');
+    Route::post('/tasks/{task}/report-uploads/{attachment}/complete', [TaskReportUploadController::class, 'complete'])->name('tasks.report-uploads.complete');
+    Route::delete('/tasks/{task}/report-uploads/{attachment}', [TaskReportUploadController::class, 'abort'])->name('tasks.report-uploads.abort');
+    Route::get('/tasks/{task}/report-attachments/{attachment}/view', [TaskReportUploadController::class, 'view'])->name('tasks.report-attachments.view');
+    Route::get('/tasks/{task}/report-attachments/{attachment}/download', [TaskReportUploadController::class, 'download'])->name('tasks.report-attachments.download');
     Route::delete('/tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy');
 });
 

@@ -82,7 +82,17 @@ class User extends Authenticatable
 
     public function collaborativeTasks(): BelongsToMany
     {
-        return $this->belongsToMany(Task::class)->withTimestamps();
+        return $this->belongsToMany(Task::class)
+            ->using(TaskAssignment::class)
+            ->as('assignment')
+            ->withPivot([
+                'id',
+                'status',
+                'started_at',
+                'submitted_at',
+                'completed_at',
+            ])
+            ->withTimestamps();
     }
 
     public function hasRole(string ...$roles): bool

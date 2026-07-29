@@ -59,7 +59,8 @@ export interface PresentationLimits {
 
 export type ProjectStatus = 'new' | 'in_progress' | 'paused' | 'completed' | 'cancelled';
 export type Priority = 'low' | 'normal' | 'high';
-export type TaskStatus = 'planned' | 'in_progress' | 'review' | 'done';
+export type TaskStatus = 'planned' | 'in_progress' | 'review' | 'needs_revision' | 'done';
+export type TaskReportStatus = 'pending' | 'accepted' | 'revision_requested';
 
 export interface ProjectRecord {
     id: number;
@@ -98,6 +99,49 @@ export interface TaskCommentRecord {
     created_at: string;
 }
 
+export interface TaskReportAttachmentRecord {
+    id: number;
+    media_type: 'image' | 'video' | 'document' | 'archive';
+    display_name: string;
+    mime_type: string | null;
+    size: number;
+    view_url: string;
+    download_url: string;
+}
+
+export interface TaskReportRecord {
+    id: number;
+    body: string;
+    status: TaskReportStatus;
+    author: UserSummary;
+    reviewer: UserSummary | null;
+    review_comment: string | null;
+    reviewed_at: string | null;
+    created_at: string;
+    attachments: TaskReportAttachmentRecord[];
+}
+
+export interface TaskAssignmentRecord {
+    id: number;
+    user_id: number;
+    user: UserSummary;
+    status: TaskStatus;
+    started_at: string | null;
+    submitted_at: string | null;
+    completed_at: string | null;
+    is_current_user: boolean;
+    can_start: boolean;
+    can_submit_report: boolean;
+    reports?: TaskReportRecord[];
+}
+
+export interface TaskReportLimits {
+    max_attachments: number;
+    max_file_size: number;
+    chunk_size: number;
+    allowed_extensions: string[];
+}
+
 export interface TaskRecord {
     id: number;
     division: 'jvm' | 'ptl' | 'wap';
@@ -109,6 +153,9 @@ export interface TaskRecord {
     assignee_id: number;
     assignee: UserSummary;
     assignees: UserSummary[];
+    assignments: TaskAssignmentRecord[];
+    assignments_count: number;
+    accepted_reports_count: number;
     creator: UserSummary | null;
     project: {
         id: number;
@@ -120,6 +167,7 @@ export interface TaskRecord {
     comments: TaskCommentRecord[];
     can_manage: boolean;
     can_change_status: boolean;
+    can_review_reports: boolean;
     can_comment: boolean;
     created_at: string;
 }

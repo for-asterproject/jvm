@@ -12,6 +12,7 @@ import {
     EmptyState,
     FormField,
 } from '@/components/crm/crm-ui';
+import { TaskProgress, TaskWorkflowPanel } from '@/components/crm/task-workflow-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -25,7 +26,6 @@ import {
     CalendarClock,
     CircleDot,
     Clock3,
-    GripVertical,
     KanbanSquare,
     List,
     ListTodo,
@@ -36,7 +36,7 @@ import {
     Send,
     Trash2,
 } from 'lucide-react';
-import { DragEvent, FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { DivisionTaskRecord, FormErrors, PlanningProject, Priority, TaskStatus, UserSummary } from './types';
 
 const columns: {
@@ -47,7 +47,7 @@ const columns: {
 }[] = [
     {
         value: 'planned',
-        label: 'Запланировано',
+        label: 'Ожидает',
         dot: 'bg-slate-400',
         surface: 'border-slate-200/80 bg-slate-100/65 dark:border-white/8 dark:bg-white/[0.025]',
     },
@@ -64,8 +64,14 @@ const columns: {
         surface: 'border-amber-200/70 bg-amber-50/65 dark:border-amber-500/12 dark:bg-amber-500/[0.035]',
     },
     {
+        value: 'needs_revision',
+        label: 'На доработке',
+        dot: 'bg-orange-500',
+        surface: 'border-orange-200/70 bg-orange-50/65 dark:border-orange-500/12 dark:bg-orange-500/[0.035]',
+    },
+    {
         value: 'done',
-        label: 'Готово',
+        label: 'Завершено',
         dot: 'bg-emerald-500',
         surface: 'border-emerald-200/70 bg-emerald-50/65 dark:border-emerald-500/12 dark:bg-emerald-500/[0.035]',
     },
@@ -94,7 +100,6 @@ const makeEmptyForm = (division: string, assigneeIds: number[] = []) => ({
     project_id: '',
     title: '',
     description: '',
-    status: 'planned' as TaskStatus,
     priority: 'normal' as Priority,
     assignee_ids: assigneeIds,
     due_date: '',
@@ -138,8 +143,6 @@ export default function DivisionTasks({
     const [detailOpen, setDetailOpen] = useState(false);
     const [editing, setEditing] = useState<DivisionTaskRecord | null>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
-    const [draggedTaskId, setDraggedTaskId] = useState<number | null>(null);
-    const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
     const [form, setForm] = useState(makeEmptyForm(division, assignees[0] ? [assignees[0].id] : []));
     const [errors, setErrors] = useState<FormErrors>({});
     const [processing, setProcessing] = useState(false);
@@ -182,7 +185,7 @@ export default function DivisionTasks({
     }, [assignees, tasks]);
 
     const plannedCount = tasks.filter((task) => task.status === 'planned').length;
-    const activeCount = tasks.filter((task) => ['in_progress', 'review'].includes(task.status)).length;
+    const activeCount = tasks.filter((task) => ['in_progress', 'review', 'needs_revision'].includes(task.status)).length;
     const overdueCount = tasks.filter(taskIsOverdue).length;
 
     const openCreate = () => {
@@ -200,7 +203,6 @@ export default function DivisionTasks({
             project_id: String(task.project_id ?? ''),
             title: task.title,
             description: task.description ?? '',
-            status: task.status,
             priority: task.priority,
             assignee_ids: taskAssignees(task).map((assignee) => assignee.id),
             due_date: task.due_date ?? '',
@@ -232,19 +234,6 @@ export default function DivisionTasks({
         } else {
             router.post('/tasks', payload, options);
         }
-    };
-
-    const changeStatus = (task: DivisionTaskRecord, status: TaskStatus) => {
-        if (!task.can_change_status || task.status === status) return;
-        router.patch(`/tasks/${task.id}/status`, { status }, { preserveScroll: true });
-    };
-
-    const onDrop = (event: DragEvent, status: TaskStatus) => {
-        event.preventDefault();
-        const task = tasks.find((item) => item.id === Number(event.dataTransfer.getData('text/task-id')));
-        setDraggedTaskId(null);
-        setDragOverStatus(null);
-        if (task) changeStatus(task, status);
     };
 
     const remove = (task: DivisionTaskRecord) => {
@@ -422,22 +411,7 @@ export default function DivisionTasks({
                                         </span>
                                     </div>
                                     <div className="mt-4 border-t border-slate-100 pt-3 dark:border-white/6">
-                                        {task.can_change_status ? (
-                                            <select
-                                                value={task.status}
-                                                onClick={(event) => event.stopPropagation()}
-                                                onChange={(event) => changeStatus(task, event.target.value as TaskStatus)}
-                                                className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm sm:w-auto"
-                                            >
-                                                {columns.map((column) => (
-                                                    <option key={column.value} value={column.value}>
-                                                        {column.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            statusBadge(task)
-                                        )}
+                                        <TaskProgress task={task} />
                                     </div>
                                 </article>
                             ))}
@@ -478,22 +452,7 @@ export default function DivisionTasks({
                                                 </div>
                                             </td>
                                             <td className="px-4 py-4">
-                                                {task.can_change_status ? (
-                                                    <select
-                                                        value={task.status}
-                                                        onClick={(event) => event.stopPropagation()}
-                                                        onChange={(event) => changeStatus(task, event.target.value as TaskStatus)}
-                                                        className="border-input bg-background h-8 rounded-md border px-2 text-xs"
-                                                    >
-                                                        {columns.map((column) => (
-                                                            <option key={column.value} value={column.value}>
-                                                                {column.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                ) : (
-                                                    statusBadge(task)
-                                                )}
+                                                <TaskProgress task={task} />
                                             </td>
                                             <td className="px-4 py-4">
                                                 <Badge variant="outline" className={priorityClasses[task.priority]}>
@@ -523,21 +482,11 @@ export default function DivisionTasks({
                     </CrmSurface>
                 ) : (
                     <div className="crm-scrollbar min-w-0 overflow-x-auto pb-3">
-                        <div className="grid min-w-[1120px] grid-cols-4 gap-4">
+                        <div className="grid min-w-[1400px] grid-cols-5 gap-4">
                             {columns.map((column) => {
                                 const columnTasks = filteredTasks.filter((task) => task.status === column.value);
-                                const isDragTarget = dragOverStatus === column.value;
                                 return (
-                                    <section
-                                        key={column.value}
-                                        onDragOver={(event) => {
-                                            event.preventDefault();
-                                            setDragOverStatus(column.value);
-                                        }}
-                                        onDragLeave={() => setDragOverStatus(null)}
-                                        onDrop={(event) => onDrop(event, column.value)}
-                                        className={`min-h-[27rem] rounded-2xl border p-3 transition-all ${column.surface} ${isDragTarget ? 'border-blue-400 ring-4 ring-blue-400/10' : ''}`}
-                                    >
+                                    <section key={column.value} className={`min-h-[27rem] rounded-2xl border p-3 transition-all ${column.surface}`}>
                                         <div className="mb-3 flex items-center justify-between px-1 py-1">
                                             <div className="flex items-center gap-2">
                                                 <span className={`size-2 rounded-full ${column.dot}`} />
@@ -551,21 +500,11 @@ export default function DivisionTasks({
                                             {columnTasks.map((task) => (
                                                 <article
                                                     key={task.id}
-                                                    draggable={task.can_change_status}
-                                                    onDragStart={(event) => {
-                                                        event.dataTransfer.setData('text/task-id', String(task.id));
-                                                        setDraggedTaskId(task.id);
-                                                    }}
-                                                    onDragEnd={() => {
-                                                        setDraggedTaskId(null);
-                                                        setDragOverStatus(null);
-                                                    }}
                                                     onClick={() => openDetails(task)}
-                                                    className={`crm-card-hover group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 dark:border-white/8 dark:bg-slate-900/90 ${draggedTaskId === task.id ? 'opacity-45' : ''}`}
+                                                    className="crm-card-hover group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 dark:border-white/8 dark:bg-slate-900/90"
                                                 >
                                                     <span className={`absolute inset-y-0 left-0 w-1 ${priorityStripes[task.priority]}`} />
                                                     <div className="flex items-start gap-2 pl-1">
-                                                        {task.can_change_status && <GripVertical className="mt-0.5 size-4 text-slate-300" />}
                                                         <h3 className="flex-1 text-sm leading-snug font-semibold text-slate-900 dark:text-white">
                                                             {task.title}
                                                         </h3>
@@ -585,25 +524,14 @@ export default function DivisionTasks({
                                                             {task.due_date ? formatDate(task.due_date) : '—'}
                                                         </span>
                                                     </div>
-                                                    {task.can_change_status && (
-                                                        <select
-                                                            value={task.status}
-                                                            onClick={(event) => event.stopPropagation()}
-                                                            onChange={(event) => changeStatus(task, event.target.value as TaskStatus)}
-                                                            className="border-input bg-background mt-3 h-8 w-full rounded-md border px-2 text-xs xl:hidden"
-                                                        >
-                                                            {columns.map((item) => (
-                                                                <option key={item.value} value={item.value}>
-                                                                    {item.label}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    )}
+                                                    <div className="mt-3">
+                                                        <TaskProgress task={task} />
+                                                    </div>
                                                 </article>
                                             ))}
                                             {columnTasks.length === 0 && (
                                                 <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-slate-300/80 p-5 text-xs text-slate-400 dark:border-white/10">
-                                                    {isDragTarget ? 'Переместить сюда' : 'Нет задач'}
+                                                    Нет задач
                                                 </div>
                                             )}
                                         </div>
@@ -659,7 +587,7 @@ export default function DivisionTasks({
                             </FormField>
                         </CrmFormSection>
 
-                        <CrmFormSection title="Исполнение" description="Исполнители, срок, статус и приоритет">
+                        <CrmFormSection title="Исполнение" description="Исполнители, срок и приоритет">
                             <FormField label="Исполнители" required error={errors.assignee_ids || errors['assignee_ids.0']}>
                                 <AssigneePicker
                                     options={formAssignees}
@@ -667,26 +595,13 @@ export default function DivisionTasks({
                                     onChange={(assigneeIds) => setForm({ ...form, assignee_ids: assigneeIds })}
                                 />
                             </FormField>
-                            <div className="grid gap-4 sm:grid-cols-3">
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 <FormField label="Срок" error={errors.due_date}>
                                     <Input
                                         type="date"
                                         value={form.due_date}
                                         onChange={(event) => setForm({ ...form, due_date: event.target.value })}
                                     />
-                                </FormField>
-                                <FormField label="Статус" required error={errors.status}>
-                                    <select
-                                        value={form.status}
-                                        onChange={(event) => setForm({ ...form, status: event.target.value as TaskStatus })}
-                                        className="border-input bg-background h-9 rounded-md border px-3"
-                                    >
-                                        {columns.map((column) => (
-                                            <option key={column.value} value={column.value}>
-                                                {column.label}
-                                            </option>
-                                        ))}
-                                    </select>
                                 </FormField>
                                 <FormField label="Приоритет" required error={errors.priority}>
                                     <select
@@ -761,6 +676,7 @@ export default function DivisionTasks({
                                         </div>
                                     </div>
                                 </div>
+                                <TaskWorkflowPanel task={selectedTask} />
                                 <section>
                                     <div className="mb-3 flex items-center justify-between">
                                         <h3 className="font-semibold">Комментарии</h3>

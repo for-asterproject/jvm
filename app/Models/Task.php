@@ -8,12 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Task extends Model
 {
     use HasFactory;
 
-    public const STATUSES = ['planned', 'in_progress', 'review', 'done'];
+    public const STATUSES = ['planned', 'in_progress', 'review', 'needs_revision', 'done'];
 
     public const PRIORITIES = ['low', 'normal', 'high'];
 
@@ -46,6 +47,17 @@ class Task extends Model
             if ($task->assignee_id) {
                 $task->assignees()->syncWithoutDetaching([$task->assignee_id]);
             }
+        });
+
+        static::deleting(function (Task $task) {
+            $task->reportAttachments()
+                ->get(['id', 'storage_disk', 'path'])
+                ->each(function (TaskReportAttachment $attachment): void {
+                    Storage::disk($attachment->storage_disk)->delete($attachment->path);
+                    Storage::disk($attachment->storage_disk)->deleteDirectory(
+                        "task-report-upload-chunks/{$attachment->id}",
+                    );
+                });
         });
     }
 
@@ -84,7 +96,32 @@ class Task extends Model
 
     public function assignees(): BelongsToMany
     {
-        return $this->belongsToMany(User::class)->withTimestamps();
+        return $this->belongsToMany(User::class)
+            ->using(TaskAssignment::class)
+            ->as('assignment')
+            ->withPivot([
+                'id',
+                'status',
+                'started_at',
+                'submitted_at',
+                'completed_at',
+            ])
+            ->withTimestamps();
+    }
+
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(TaskAssignment::class);
+    }
+
+    public function reports(): HasMany
+    {
+        return $this->hasMany(TaskReport::class);
+    }
+
+    public function reportAttachments(): HasMany
+    {
+        return $this->hasMany(TaskReportAttachment::class);
     }
 
     public function creator(): BelongsTo

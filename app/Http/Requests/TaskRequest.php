@@ -25,7 +25,7 @@ class TaskRequest extends FormRequest
             ],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:10000'],
-            'status' => ['required', Rule::in(Task::STATUSES)],
+            'status' => ['sometimes', Rule::in(Task::STATUSES)],
             'priority' => ['required', Rule::in(Task::PRIORITIES)],
             'assignee_id' => ['required_without:assignee_ids', 'nullable', 'integer', 'exists:users,id'],
             'assignee_ids' => ['required_without:assignee_id', 'nullable', 'array', 'min:1'],

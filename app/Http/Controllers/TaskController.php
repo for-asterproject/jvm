@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Requests\TaskRequest;
 use App\Models\Project;
 use App\Models\Task;
+use App\Models\TaskAssignment;
 use App\Models\User;
+use App\Services\TaskWorkflowService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -49,6 +51,7 @@ class TaskController extends Controller
                 'project:id,name,division,manager_id',
                 'assignee:id,name,email',
                 'assignees:id,name,email,manager_id',
+                'assignments.user:id,name,email',
                 'creator:id,name',
                 'comments.user:id,name',
             ])
@@ -76,6 +79,7 @@ class TaskController extends Controller
                 'project:id,name,division,manager_id',
                 'assignee:id,name,email,manager_id',
                 'assignees:id,name,email,manager_id',
+                'assignments.user:id,name,email',
                 'creator:id,name',
                 'comments.user:id,name',
             ])
@@ -133,12 +137,14 @@ class TaskController extends Controller
         }
 
         unset($data['assignee_ids']);
+        unset($data['status']);
         $task = Task::create([
             ...$data,
             'project_id' => $project?->id,
             'division' => $division,
             'assignee_id' => $assigneeIds->first(),
             'creator_id' => $request->user()->id,
+            'status' => TaskAssignment::STATUS_PLANNED,
         ]);
         $task->assignees()->sync($assigneeIds);
 
@@ -164,7 +170,9 @@ class TaskController extends Controller
             $division = $data['division'] ?? $task->division;
         }
 
+        $this->ensureActiveAssigneesAreKept($task, $assigneeIds, $errorField);
         unset($data['assignee_ids']);
+        unset($data['status']);
         $task->update([
             ...$data,
             'project_id' => $project?->id,
@@ -172,20 +180,24 @@ class TaskController extends Controller
             'assignee_id' => $assigneeIds->first(),
         ]);
         $task->assignees()->sync($assigneeIds);
+        app(TaskWorkflowService::class)->refreshTaskStatus($task);
 
         return back()->with('success', 'Задача обновлена.');
     }
 
-    public function updateStatus(Request $request, Task $task): RedirectResponse
-    {
+    public function updateStatus(
+        Request $request,
+        Task $task,
+        TaskWorkflowService $workflow,
+    ): RedirectResponse {
         $task->load(['project', 'assignee', 'assignees']);
         $this->authorize('changeStatus', $task);
-        $validated = $request->validate([
-            'status' => ['required', Rule::in(Task::STATUSES)],
+        $request->validate([
+            'status' => ['required', Rule::in([TaskAssignment::STATUS_IN_PROGRESS])],
         ]);
-        $task->update($validated);
+        $workflow->start($task, $request->user());
 
-        return back()->with('success', 'Статус задачи изменён.');
+        return back()->with('success', 'Задача взята в работу.');
     }
 
     public function comment(Request $request, Task $task): RedirectResponse
@@ -230,6 +242,26 @@ class TaskController extends Controller
         if ($assigneeIds->diff($allowedIds)->isNotEmpty()) {
             throw ValidationException::withMessages([
                 $errorField => 'Одному или нескольким пользователям нельзя назначить задачу.',
+            ]);
+        }
+    }
+
+    private function ensureActiveAssigneesAreKept(
+        Task $task,
+        Collection $assigneeIds,
+        string $errorField,
+    ): void {
+        $protectedAssigneeIds = $task->assignments()
+            ->where(function ($assignments) {
+                $assignments
+                    ->where('status', '!=', TaskAssignment::STATUS_PLANNED)
+                    ->orWhereHas('reports');
+            })
+            ->pluck('user_id');
+
+        if ($protectedAssigneeIds->diff($assigneeIds)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                $errorField => 'Нельзя удалить исполнителя, который уже начал работу или сдавал отчёт.',
             ]);
         }
     }
@@ -289,10 +321,34 @@ class TaskController extends Controller
 
     private function taskPayload(Task $task, User $user): array
     {
+        $assignments = $task->assignments->map(fn (TaskAssignment $assignment) => [
+            'id' => $assignment->id,
+            'user_id' => $assignment->user_id,
+            'user' => $assignment->user,
+            'status' => $assignment->status,
+            'started_at' => $assignment->started_at?->toISOString(),
+            'submitted_at' => $assignment->submitted_at?->toISOString(),
+            'completed_at' => $assignment->completed_at?->toISOString(),
+            'is_current_user' => $assignment->user_id === $user->id,
+            'can_start' => $assignment->user_id === $user->id
+                && $assignment->status === TaskAssignment::STATUS_PLANNED,
+            'can_submit_report' => $assignment->user_id === $user->id
+                && in_array($assignment->status, [
+                    TaskAssignment::STATUS_IN_PROGRESS,
+                    TaskAssignment::STATUS_NEEDS_REVISION,
+                ], true),
+        ])->values();
+
         return [
             ...$task->toArray(),
+            'assignments' => $assignments,
+            'assignments_count' => $assignments->count(),
+            'accepted_reports_count' => $assignments
+                ->where('status', TaskAssignment::STATUS_DONE)
+                ->count(),
             'can_manage' => $user->can('update', $task),
-            'can_change_status' => $user->can('changeStatus', $task),
+            'can_change_status' => false,
+            'can_review_reports' => $user->can('reviewReports', $task),
             'can_comment' => $user->can('comment', $task),
         ];
     }

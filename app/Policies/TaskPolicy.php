@@ -53,7 +53,17 @@ class TaskPolicy
 
     public function changeStatus(User $user, Task $task): bool
     {
-        return $this->update($user, $task) || $this->isAssignee($user, $task);
+        return $this->work($user, $task);
+    }
+
+    public function work(User $user, Task $task): bool
+    {
+        return $this->isAssignee($user, $task);
+    }
+
+    public function reviewReports(User $user, Task $task): bool
+    {
+        return $user->isAdministrator() || $task->creator_id === $user->id;
     }
 
     public function comment(User $user, Task $task): bool
