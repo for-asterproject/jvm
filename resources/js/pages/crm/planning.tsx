@@ -291,8 +291,8 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                 {projects.length === 0 ? (
                     <EmptyState title="Нет доступных проектов">После назначения проекта здесь появятся задачи и канбан.</EmptyState>
                 ) : (
-                    <div className="crm-scrollbar min-w-0 overflow-x-auto pb-3">
-                        <div className="grid min-w-[1400px] grid-cols-5 gap-4">
+                    <div className="crm-scrollbar w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain pb-3">
+                        <div className="grid w-full min-w-[1400px] grid-cols-5 gap-4">
                             {columns.map((column) => {
                                 const columnTasks = filteredTasks.filter((task) => task.status === column.value);
 

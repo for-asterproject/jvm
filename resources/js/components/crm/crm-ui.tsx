@@ -4,10 +4,10 @@ import { ReactNode } from 'react';
 
 export function CrmPageShell({ children, className }: { children: ReactNode; className?: string }) {
     return (
-        <div className={cn('crm-shell relative flex min-w-0 flex-1 flex-col overflow-hidden', className)}>
+        <div className={cn('crm-shell relative flex w-full max-w-full min-w-0 flex-1 flex-col overflow-hidden', className)}>
             <div className="pointer-events-none absolute -top-40 -right-32 size-96 rounded-full bg-blue-400/10 blur-3xl dark:bg-blue-500/10" />
             <div className="pointer-events-none absolute top-72 -left-52 size-[30rem] rounded-full bg-cyan-300/10 blur-3xl dark:bg-cyan-500/5" />
-            <div className="relative z-10 flex flex-1 flex-col gap-6 p-4 md:p-6 xl:p-8">{children}</div>
+            <div className="relative z-10 flex w-full max-w-full min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 xl:p-8">{children}</div>
         </div>
     );
 }
