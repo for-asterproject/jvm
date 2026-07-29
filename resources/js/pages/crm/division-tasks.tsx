@@ -481,64 +481,65 @@ export default function DivisionTasks({
                         </div>
                     </CrmSurface>
                 ) : (
-                    <div className="crm-scrollbar w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain pb-3">
-                        <div className="grid w-full min-w-[1400px] grid-cols-5 gap-4">
-                            {columns.map((column) => {
-                                const columnTasks = filteredTasks.filter((task) => task.status === column.value);
-                                return (
-                                    <section key={column.value} className={`min-h-[27rem] rounded-2xl border p-3 transition-all ${column.surface}`}>
-                                        <div className="mb-3 flex items-center justify-between px-1 py-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`size-2 rounded-full ${column.dot}`} />
-                                                <h2 className="text-sm font-semibold">{column.label}</h2>
-                                            </div>
-                                            <span className="rounded-lg bg-white/80 px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm dark:bg-slate-900/70 dark:text-slate-300">
-                                                {columnTasks.length}
-                                            </span>
+                    <div className="grid w-full min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+                        {columns.map((column) => {
+                            const columnTasks = filteredTasks.filter((task) => task.status === column.value);
+                            return (
+                                <section
+                                    key={column.value}
+                                    className={`min-h-[27rem] min-w-0 rounded-2xl border p-3 transition-all ${column.surface}`}
+                                >
+                                    <div className="mb-3 flex items-center justify-between px-1 py-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`size-2 rounded-full ${column.dot}`} />
+                                            <h2 className="text-sm font-semibold">{column.label}</h2>
                                         </div>
-                                        <div className="grid gap-3">
-                                            {columnTasks.map((task) => (
-                                                <article
-                                                    key={task.id}
-                                                    onClick={() => openDetails(task)}
-                                                    className="crm-card-hover group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 dark:border-white/8 dark:bg-slate-900/90"
-                                                >
-                                                    <span className={`absolute inset-y-0 left-0 w-1 ${priorityStripes[task.priority]}`} />
-                                                    <div className="flex items-start gap-2 pl-1">
-                                                        <h3 className="flex-1 text-sm leading-snug font-semibold text-slate-900 dark:text-white">
-                                                            {task.title}
-                                                        </h3>
-                                                    </div>
-                                                    <p className="mt-2 pl-1 text-[11px] font-medium tracking-wide text-blue-600 uppercase dark:text-blue-300">
-                                                        {task.project?.name ?? 'Без проекта'}
-                                                    </p>
-                                                    <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-white/6">
-                                                        <div className="flex min-w-0 items-center gap-2">
-                                                            <CrmAvatarStack names={taskAssignees(task).map((assignee) => assignee.name)} />
-                                                            <span className="truncate text-xs">{assigneeSummary(task)}</span>
-                                                        </div>
-                                                        <span
-                                                            className={`flex items-center gap-1 text-[11px] ${taskIsOverdue(task) ? 'font-semibold text-rose-600' : 'text-slate-400'}`}
-                                                        >
-                                                            <CalendarClock className="size-3.5" />
-                                                            {task.due_date ? formatDate(task.due_date) : '—'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="mt-3">
-                                                        <TaskProgress task={task} />
-                                                    </div>
-                                                </article>
-                                            ))}
-                                            {columnTasks.length === 0 && (
-                                                <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-slate-300/80 p-5 text-xs text-slate-400 dark:border-white/10">
-                                                    Нет задач
+                                        <span className="rounded-lg bg-white/80 px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm dark:bg-slate-900/70 dark:text-slate-300">
+                                            {columnTasks.length}
+                                        </span>
+                                    </div>
+                                    <div className="grid gap-3">
+                                        {columnTasks.map((task) => (
+                                            <article
+                                                key={task.id}
+                                                onClick={() => openDetails(task)}
+                                                className="crm-card-hover group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 dark:border-white/8 dark:bg-slate-900/90"
+                                            >
+                                                <span className={`absolute inset-y-0 left-0 w-1 ${priorityStripes[task.priority]}`} />
+                                                <div className="flex items-start gap-2 pl-1">
+                                                    <h3 className="flex-1 text-sm leading-snug font-semibold text-slate-900 dark:text-white">
+                                                        {task.title}
+                                                    </h3>
                                                 </div>
-                                            )}
-                                        </div>
-                                    </section>
-                                );
-                            })}
-                        </div>
+                                                <p className="mt-2 pl-1 text-[11px] font-medium tracking-wide text-blue-600 uppercase dark:text-blue-300">
+                                                    {task.project?.name ?? 'Без проекта'}
+                                                </p>
+                                                <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-white/6">
+                                                    <div className="flex min-w-0 items-center gap-2">
+                                                        <CrmAvatarStack names={taskAssignees(task).map((assignee) => assignee.name)} />
+                                                        <span className="truncate text-xs">{assigneeSummary(task)}</span>
+                                                    </div>
+                                                    <span
+                                                        className={`flex items-center gap-1 text-[11px] ${taskIsOverdue(task) ? 'font-semibold text-rose-600' : 'text-slate-400'}`}
+                                                    >
+                                                        <CalendarClock className="size-3.5" />
+                                                        {task.due_date ? formatDate(task.due_date) : '—'}
+                                                    </span>
+                                                </div>
+                                                <div className="mt-3">
+                                                    <TaskProgress task={task} />
+                                                </div>
+                                            </article>
+                                        ))}
+                                        {columnTasks.length === 0 && (
+                                            <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-slate-300/80 p-5 text-xs text-slate-400 dark:border-white/10">
+                                                Нет задач
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+                            );
+                        })}
                     </div>
                 )}
             </CrmPageShell>
