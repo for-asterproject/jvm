@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Task extends Model
@@ -40,6 +41,12 @@ class Task extends Model
                 $task->division = Project::query()->whereKey($task->project_id)->value('division');
             }
         });
+
+        static::created(function (Task $task) {
+            if ($task->assignee_id) {
+                $task->assignees()->syncWithoutDetaching([$task->assignee_id]);
+            }
+        });
     }
 
     public function project(): BelongsTo
@@ -56,6 +63,7 @@ class Task extends Model
         return $query->where(function (Builder $tasks) use ($user) {
             $tasks
                 ->where('assignee_id', $user->id)
+                ->orWhereHas('assignees', fn (Builder $assignees) => $assignees->whereKey($user->id))
                 ->orWhere('creator_id', $user->id)
                 ->orWhereHas('project', function (Builder $projects) use ($user) {
                     $projects
@@ -64,7 +72,7 @@ class Task extends Model
                 });
 
             if ($user->isManager()) {
-                $tasks->orWhereHas('assignee', fn (Builder $assignees) => $assignees->where('manager_id', $user->id));
+                $tasks->orWhereHas('assignees', fn (Builder $assignees) => $assignees->where('manager_id', $user->id));
             }
         });
     }
@@ -72,6 +80,11 @@ class Task extends Model
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assignee_id');
+    }
+
+    public function assignees(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class)->withTimestamps();
     }
 
     public function creator(): BelongsTo

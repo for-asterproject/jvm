@@ -82,7 +82,7 @@ class RoleController extends Controller
             ], 422);
         }
 
-        if ($user->managedProjects()->exists() || $user->assignedTasks()->exists()) {
+        if ($user->managedProjects()->exists() || $user->assignedTasks()->exists() || $user->collaborativeTasks()->exists()) {
             return response()->json([
                 'message' => 'Сначала переназначьте проекты и задачи этого пользователя.',
             ], 422);

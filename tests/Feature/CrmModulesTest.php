@@ -480,6 +480,69 @@ class CrmModulesTest extends TestCase
         $this->assertDatabaseCount('tasks', 0);
     }
 
+    public function test_task_can_have_multiple_assignees_and_each_can_work_with_it(): void
+    {
+        $manager = $this->userWithRole('Руководитель');
+        $firstEmployee = $this->userWithRole('Сотрудник', $manager);
+        $secondEmployee = $this->userWithRole('Сотрудник', $manager);
+
+        $this->actingAs($manager)
+            ->post('/tasks', $this->standaloneTaskPayload($firstEmployee, [
+                'assignee_id' => null,
+                'assignee_ids' => [$firstEmployee->id, $secondEmployee->id],
+            ]))
+            ->assertRedirect();
+
+        $task = Task::with('assignees')->firstOrFail();
+        $this->assertSame($firstEmployee->id, $task->assignee_id);
+        $this->assertEqualsCanonicalizing(
+            [$firstEmployee->id, $secondEmployee->id],
+            $task->assignees->pluck('id')->all(),
+        );
+
+        $this->actingAs($secondEmployee)
+            ->get('/tasks/jvm')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('tasks', 1)
+                ->has('tasks.0.assignees', 2));
+
+        $this->actingAs($secondEmployee)
+            ->patch("/tasks/{$task->id}/status", ['status' => 'in_progress'])
+            ->assertRedirect();
+        $this->actingAs($secondEmployee)
+            ->post("/tasks/{$task->id}/comments", ['body' => 'Работаем вместе.'])
+            ->assertRedirect();
+
+        $this->assertSame('in_progress', $task->fresh()->status);
+        $this->assertDatabaseHas('task_comments', [
+            'task_id' => $task->id,
+            'user_id' => $secondEmployee->id,
+        ]);
+    }
+
+    public function test_all_project_task_assignees_must_participate_in_project(): void
+    {
+        $manager = $this->userWithRole('Руководитель');
+        $employee = $this->userWithRole('Сотрудник', $manager);
+        $outsider = $this->userWithRole('Сотрудник');
+        $project = Project::create([
+            ...$this->projectPayload(),
+            'division' => 'jvm',
+            'manager_id' => $manager->id,
+        ]);
+        $project->members()->attach($employee);
+
+        $this->actingAs($manager)
+            ->post('/tasks', $this->taskPayload($project, $employee, [
+                'assignee_id' => null,
+                'assignee_ids' => [$employee->id, $outsider->id],
+            ]))
+            ->assertSessionHasErrors('assignee_ids');
+
+        $this->assertDatabaseCount('tasks', 0);
+    }
+
     public function test_project_task_keeps_its_division_and_survives_project_deletion(): void
     {
         $manager = $this->userWithRole('Руководитель');

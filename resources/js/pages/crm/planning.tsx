@@ -1,5 +1,7 @@
+import { AssigneePicker } from '@/components/crm/assignee-picker';
 import {
     CrmAvatar,
+    CrmAvatarStack,
     CrmFormSection,
     CrmPageHeader,
     CrmPageShell,
@@ -91,11 +93,18 @@ const makeEmptyForm = (projectId = '') => ({
     description: '',
     status: 'planned' as TaskStatus,
     priority: 'normal' as Priority,
-    assignee_id: '',
+    assignee_ids: [] as number[],
     due_date: '',
 });
 
 const taskIsOverdue = (task: TaskRecord) => Boolean(task.due_date && task.status !== 'done' && new Date(`${task.due_date}T23:59:59`) < new Date());
+
+const taskAssignees = (task: TaskRecord) => (task.assignees.length ? task.assignees : [task.assignee]);
+
+const assigneeSummary = (task: TaskRecord) => {
+    const assigned = taskAssignees(task);
+    return assigned.length > 1 ? `${assigned[0].name} +${assigned.length - 1}` : assigned[0].name;
+};
 
 export default function Planning({ projects, tasks }: { projects: PlanningProject[]; tasks: TaskRecord[] }) {
     const manageableProjects = projects.filter((project) => project.can_manage);
@@ -126,10 +135,15 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
         const needle = query.trim().toLowerCase();
         return tasks.filter((task) => {
             return (
-                (!needle || `${task.title} ${task.description ?? ''} ${task.project.name} ${task.assignee.name}`.toLowerCase().includes(needle)) &&
+                (!needle ||
+                    `${task.title} ${task.description ?? ''} ${task.project.name} ${taskAssignees(task)
+                        .map((assignee) => assignee.name)
+                        .join(' ')}`
+                        .toLowerCase()
+                        .includes(needle)) &&
                 (division === 'all' || task.project.division === division) &&
                 (projectFilter === 'all' || task.project_id === Number(projectFilter)) &&
-                (assigneeFilter === 'all' || task.assignee_id === Number(assigneeFilter))
+                (assigneeFilter === 'all' || taskAssignees(task).some((assignee) => assignee.id === Number(assigneeFilter)))
             );
         });
     }, [tasks, query, division, projectFilter, assigneeFilter]);
@@ -144,7 +158,7 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
         setEditing(null);
         setForm({
             ...makeEmptyForm(String(project?.id ?? '')),
-            assignee_id: String(project?.participants[0]?.id ?? ''),
+            assignee_ids: project?.participants[0] ? [project.participants[0].id] : [],
         });
         setErrors({});
         setFormOpen(true);
@@ -159,7 +173,7 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
             description: task.description ?? '',
             status: task.status,
             priority: task.priority,
-            assignee_id: String(task.assignee_id),
+            assignee_ids: taskAssignees(task).map((assignee) => assignee.id),
             due_date: task.due_date ?? '',
         });
         setErrors({});
@@ -299,140 +313,144 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                 {projects.length === 0 ? (
                     <EmptyState title="Нет доступных проектов">После назначения проекта здесь появятся задачи и канбан.</EmptyState>
                 ) : (
-                    <div className="crm-scrollbar grid min-w-0 auto-cols-[minmax(280px,1fr)] grid-flow-col gap-4 overflow-x-auto pb-2 xl:grid-flow-row xl:grid-cols-4 xl:overflow-visible">
-                        {columns.map((column) => {
-                            const columnTasks = filteredTasks.filter((task) => task.status === column.value);
-                            const isDragTarget = dragOverStatus === column.value;
+                    <div className="crm-scrollbar min-w-0 overflow-x-auto pb-3">
+                        <div className="grid min-w-[1120px] grid-cols-4 gap-4">
+                            {columns.map((column) => {
+                                const columnTasks = filteredTasks.filter((task) => task.status === column.value);
+                                const isDragTarget = dragOverStatus === column.value;
 
-                            return (
-                                <section
-                                    key={column.value}
-                                    onDragOver={(event) => {
-                                        event.preventDefault();
-                                        setDragOverStatus(column.value);
-                                    }}
-                                    onDragLeave={(event) => {
-                                        if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-                                            setDragOverStatus(null);
-                                        }
-                                    }}
-                                    onDrop={(event) => onDrop(event, column.value)}
-                                    className={`min-h-[27rem] rounded-2xl border p-3 transition-all ${column.surface} ${
-                                        isDragTarget ? 'scale-[1.01] border-blue-400 ring-4 ring-blue-400/10' : ''
-                                    }`}
-                                >
-                                    <div className="mb-3 flex items-center justify-between px-1 py-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`size-2 rounded-full ${column.dot}`} />
-                                            <h2 className={`text-sm font-semibold ${column.header}`}>{column.label}</h2>
-                                        </div>
-                                        <span className="flex min-w-7 items-center justify-center rounded-lg bg-white/80 px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200/60 dark:bg-slate-900/70 dark:text-slate-300 dark:ring-white/8">
-                                            {columnTasks.length}
-                                        </span>
-                                    </div>
-
-                                    <div className="grid gap-3">
-                                        {columnTasks.map((task) => (
-                                            <article
-                                                key={task.id}
-                                                draggable={task.can_change_status}
-                                                onDragStart={(event) => {
-                                                    event.dataTransfer.setData('text/task-id', String(task.id));
-                                                    event.dataTransfer.effectAllowed = 'move';
-                                                    setDraggedTaskId(task.id);
-                                                }}
-                                                onDragEnd={() => {
-                                                    setDraggedTaskId(null);
-                                                    setDragOverStatus(null);
-                                                }}
-                                                onClick={() => openDetails(task)}
-                                                className={`crm-card-hover group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 shadow-[0_12px_28px_-24px_rgba(15,45,82,0.9)] dark:border-white/8 dark:bg-slate-900/90 ${
-                                                    draggedTaskId === task.id ? 'scale-95 opacity-45' : ''
-                                                }`}
-                                            >
-                                                <span className={`absolute inset-y-0 left-0 w-1 ${priorityStripes[task.priority]}`} />
-                                                <div className="mb-2 flex items-start gap-2 pl-1">
-                                                    {task.can_change_status && (
-                                                        <GripVertical className="mt-0.5 size-4 shrink-0 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-slate-600" />
-                                                    )}
-                                                    <h3 className="flex-1 text-sm leading-snug font-semibold text-slate-900 dark:text-white">
-                                                        {task.title}
-                                                    </h3>
-                                                    {task.priority === 'high' && (
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="shrink-0 border-rose-200 bg-rose-50 text-[10px] text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200"
-                                                        >
-                                                            Высокий
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                                <p className="mb-4 pl-1 text-[11px] font-medium tracking-wide text-blue-600 uppercase dark:text-blue-300">
-                                                    {task.project.division} · {task.project.name}
-                                                </p>
-                                                <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-white/6">
-                                                    <div className="flex min-w-0 items-center gap-2">
-                                                        <CrmAvatar name={task.assignee.name} className="size-7 rounded-lg" />
-                                                        <span className="truncate text-xs text-slate-600 dark:text-slate-300">
-                                                            {task.assignee.name}
-                                                        </span>
-                                                    </div>
-                                                    <div
-                                                        className={`flex shrink-0 items-center gap-1 text-[11px] ${
-                                                            taskIsOverdue(task) ? 'font-semibold text-rose-600 dark:text-rose-300' : 'text-slate-400'
-                                                        }`}
-                                                    >
-                                                        <CalendarClock className="size-3.5" />
-                                                        {task.due_date
-                                                            ? new Date(task.due_date).toLocaleDateString('ru-RU', {
-                                                                  day: '2-digit',
-                                                                  month: '2-digit',
-                                                              })
-                                                            : '—'}
-                                                    </div>
-                                                </div>
-                                                {task.comments.length > 0 && (
-                                                    <div className="mt-2 flex justify-end text-[11px] text-slate-400">
-                                                        <span className="flex items-center gap-1">
-                                                            <MessageSquare className="size-3.5" />
-                                                            {task.comments.length}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                {task.can_change_status && (
-                                                    <select
-                                                        value={task.status}
-                                                        onClick={(event) => event.stopPropagation()}
-                                                        onChange={(event) => {
-                                                            event.stopPropagation();
-                                                            changeStatus(task, event.target.value as TaskStatus);
-                                                        }}
-                                                        className="mt-3 h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-xs xl:hidden dark:border-white/10 dark:bg-white/5"
-                                                    >
-                                                        {columns.map((item) => (
-                                                            <option key={item.value} value={item.value}>
-                                                                {item.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                )}
-                                            </article>
-                                        ))}
-                                        {columnTasks.length === 0 && (
-                                            <div
-                                                className={`flex min-h-28 items-center justify-center rounded-xl border border-dashed p-5 text-center text-xs transition ${
-                                                    isDragTarget
-                                                        ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200'
-                                                        : 'border-slate-300/80 text-slate-400 dark:border-white/10'
-                                                }`}
-                                            >
-                                                {isDragTarget ? 'Переместить сюда' : 'Нет задач'}
+                                return (
+                                    <section
+                                        key={column.value}
+                                        onDragOver={(event) => {
+                                            event.preventDefault();
+                                            setDragOverStatus(column.value);
+                                        }}
+                                        onDragLeave={(event) => {
+                                            if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                                                setDragOverStatus(null);
+                                            }
+                                        }}
+                                        onDrop={(event) => onDrop(event, column.value)}
+                                        className={`min-h-[27rem] rounded-2xl border p-3 transition-all ${column.surface} ${
+                                            isDragTarget ? 'scale-[1.01] border-blue-400 ring-4 ring-blue-400/10' : ''
+                                        }`}
+                                    >
+                                        <div className="mb-3 flex items-center justify-between px-1 py-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`size-2 rounded-full ${column.dot}`} />
+                                                <h2 className={`text-sm font-semibold ${column.header}`}>{column.label}</h2>
                                             </div>
-                                        )}
-                                    </div>
-                                </section>
-                            );
-                        })}
+                                            <span className="flex min-w-7 items-center justify-center rounded-lg bg-white/80 px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200/60 dark:bg-slate-900/70 dark:text-slate-300 dark:ring-white/8">
+                                                {columnTasks.length}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid gap-3">
+                                            {columnTasks.map((task) => (
+                                                <article
+                                                    key={task.id}
+                                                    draggable={task.can_change_status}
+                                                    onDragStart={(event) => {
+                                                        event.dataTransfer.setData('text/task-id', String(task.id));
+                                                        event.dataTransfer.effectAllowed = 'move';
+                                                        setDraggedTaskId(task.id);
+                                                    }}
+                                                    onDragEnd={() => {
+                                                        setDraggedTaskId(null);
+                                                        setDragOverStatus(null);
+                                                    }}
+                                                    onClick={() => openDetails(task)}
+                                                    className={`crm-card-hover group relative cursor-pointer overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 shadow-[0_12px_28px_-24px_rgba(15,45,82,0.9)] dark:border-white/8 dark:bg-slate-900/90 ${
+                                                        draggedTaskId === task.id ? 'scale-95 opacity-45' : ''
+                                                    }`}
+                                                >
+                                                    <span className={`absolute inset-y-0 left-0 w-1 ${priorityStripes[task.priority]}`} />
+                                                    <div className="mb-2 flex items-start gap-2 pl-1">
+                                                        {task.can_change_status && (
+                                                            <GripVertical className="mt-0.5 size-4 shrink-0 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-slate-600" />
+                                                        )}
+                                                        <h3 className="flex-1 text-sm leading-snug font-semibold text-slate-900 dark:text-white">
+                                                            {task.title}
+                                                        </h3>
+                                                        {task.priority === 'high' && (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="shrink-0 border-rose-200 bg-rose-50 text-[10px] text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200"
+                                                            >
+                                                                Высокий
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <p className="mb-4 pl-1 text-[11px] font-medium tracking-wide text-blue-600 uppercase dark:text-blue-300">
+                                                        {task.project.division} · {task.project.name}
+                                                    </p>
+                                                    <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-white/6">
+                                                        <div className="flex min-w-0 items-center gap-2">
+                                                            <CrmAvatarStack names={taskAssignees(task).map((assignee) => assignee.name)} />
+                                                            <span className="truncate text-xs text-slate-600 dark:text-slate-300">
+                                                                {assigneeSummary(task)}
+                                                            </span>
+                                                        </div>
+                                                        <div
+                                                            className={`flex shrink-0 items-center gap-1 text-[11px] ${
+                                                                taskIsOverdue(task)
+                                                                    ? 'font-semibold text-rose-600 dark:text-rose-300'
+                                                                    : 'text-slate-400'
+                                                            }`}
+                                                        >
+                                                            <CalendarClock className="size-3.5" />
+                                                            {task.due_date
+                                                                ? new Date(task.due_date).toLocaleDateString('ru-RU', {
+                                                                      day: '2-digit',
+                                                                      month: '2-digit',
+                                                                  })
+                                                                : '—'}
+                                                        </div>
+                                                    </div>
+                                                    {task.comments.length > 0 && (
+                                                        <div className="mt-2 flex justify-end text-[11px] text-slate-400">
+                                                            <span className="flex items-center gap-1">
+                                                                <MessageSquare className="size-3.5" />
+                                                                {task.comments.length}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    {task.can_change_status && (
+                                                        <select
+                                                            value={task.status}
+                                                            onClick={(event) => event.stopPropagation()}
+                                                            onChange={(event) => {
+                                                                event.stopPropagation();
+                                                                changeStatus(task, event.target.value as TaskStatus);
+                                                            }}
+                                                            className="mt-3 h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-xs xl:hidden dark:border-white/10 dark:bg-white/5"
+                                                        >
+                                                            {columns.map((item) => (
+                                                                <option key={item.value} value={item.value}>
+                                                                    {item.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                </article>
+                                            ))}
+                                            {columnTasks.length === 0 && (
+                                                <div
+                                                    className={`flex min-h-28 items-center justify-center rounded-xl border border-dashed p-5 text-center text-xs transition ${
+                                                        isDragTarget
+                                                            ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-200'
+                                                            : 'border-slate-300/80 text-slate-400 dark:border-white/10'
+                                                    }`}
+                                                >
+                                                    {isDragTarget ? 'Переместить сюда' : 'Нет задач'}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </section>
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
             </CrmPageShell>
@@ -454,10 +472,13 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                                     value={form.project_id}
                                     onChange={(event) => {
                                         const project = projects.find((item) => item.id === Number(event.target.value));
+                                        const participants = project?.participants ?? [];
+                                        const participantIds = new Set(participants.map((participant) => participant.id));
+                                        const selectedIds = form.assignee_ids.filter((id) => participantIds.has(id));
                                         setForm({
                                             ...form,
                                             project_id: event.target.value,
-                                            assignee_id: String(project?.participants[0]?.id ?? ''),
+                                            assignee_ids: selectedIds.length ? selectedIds : participants[0] ? [participants[0].id] : [],
                                         });
                                     }}
                                     className="border-input bg-background h-9 rounded-md border px-3"
@@ -477,22 +498,15 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                             </FormField>
                         </CrmFormSection>
 
-                        <CrmFormSection title="Исполнение" description="Ответственный, срок, статус и приоритет">
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <FormField label="Исполнитель" required error={errors.assignee_id}>
-                                    <select
-                                        value={form.assignee_id}
-                                        onChange={(event) => setForm({ ...form, assignee_id: event.target.value })}
-                                        className="border-input bg-background h-9 rounded-md border px-3"
-                                    >
-                                        <option value="">Выберите исполнителя</option>
-                                        {selectedProject?.participants.map((participant) => (
-                                            <option key={participant.id} value={participant.id}>
-                                                {participant.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </FormField>
+                        <CrmFormSection title="Исполнение" description="Исполнители, срок, статус и приоритет">
+                            <FormField label="Исполнители" required error={errors.assignee_ids || errors['assignee_ids.0']}>
+                                <AssigneePicker
+                                    options={selectedProject?.participants ?? []}
+                                    selectedIds={form.assignee_ids}
+                                    onChange={(assigneeIds) => setForm({ ...form, assignee_ids: assigneeIds })}
+                                />
+                            </FormField>
+                            <div className="grid gap-4 sm:grid-cols-3">
                                 <FormField label="Срок" error={errors.due_date}>
                                     <Input
                                         type="date"
@@ -580,10 +594,14 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                                 )}
                                 <div className="grid gap-3 rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 text-sm sm:grid-cols-2 dark:border-white/8 dark:bg-white/[0.025]">
                                     <div className="flex items-center gap-3">
-                                        <CrmAvatar name={selectedTask.assignee.name} />
+                                        <CrmAvatarStack names={taskAssignees(selectedTask).map((assignee) => assignee.name)} />
                                         <div>
-                                            <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">Исполнитель</div>
-                                            <div className="font-medium text-slate-800 dark:text-slate-200">{selectedTask.assignee.name}</div>
+                                            <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">Исполнители</div>
+                                            <div className="font-medium text-slate-800 dark:text-slate-200">
+                                                {taskAssignees(selectedTask)
+                                                    .map((assignee) => assignee.name)
+                                                    .join(', ')}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">

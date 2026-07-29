@@ -80,6 +80,11 @@ class User extends Authenticatable
         return $this->hasMany(Task::class, 'assignee_id');
     }
 
+    public function collaborativeTasks(): BelongsToMany
+    {
+        return $this->belongsToMany(Task::class)->withTimestamps();
+    }
+
     public function hasRole(string ...$roles): bool
     {
         $roleNames = $this->relationLoaded('roles')

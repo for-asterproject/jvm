@@ -11,7 +11,7 @@ class TaskPolicy
     public function view(User $user, Task $task): bool
     {
         if ($user->isAdministrator()
-            || $task->assignee_id === $user->id
+            || $this->isAssignee($user, $task)
             || $task->creator_id === $user->id) {
             return true;
         }
@@ -20,7 +20,7 @@ class TaskPolicy
             return true;
         }
 
-        return $user->isManager() && $task->assignee?->manager_id === $user->id;
+        return $user->isManager() && $this->managesAssignee($user, $task);
     }
 
     public function create(User $user, ?Project $project = null): bool
@@ -43,7 +43,7 @@ class TaskPolicy
         }
 
         return $user->isManager()
-            && ($task->creator_id === $user->id || $task->assignee?->manager_id === $user->id);
+            && ($task->creator_id === $user->id || $this->managesAssignee($user, $task));
     }
 
     public function delete(User $user, Task $task): bool
@@ -53,11 +53,32 @@ class TaskPolicy
 
     public function changeStatus(User $user, Task $task): bool
     {
-        return $this->update($user, $task) || $task->assignee_id === $user->id;
+        return $this->update($user, $task) || $this->isAssignee($user, $task);
     }
 
     public function comment(User $user, Task $task): bool
     {
-        return $this->update($user, $task) || $task->assignee_id === $user->id;
+        return $this->update($user, $task) || $this->isAssignee($user, $task);
+    }
+
+    private function isAssignee(User $user, Task $task): bool
+    {
+        if ($task->relationLoaded('assignees')) {
+            return $task->assignee_id === $user->id
+                || $task->assignees->contains('id', $user->id);
+        }
+
+        return $task->assignee_id === $user->id
+            || $task->assignees()->whereKey($user->id)->exists();
+    }
+
+    private function managesAssignee(User $user, Task $task): bool
+    {
+        if ($task->relationLoaded('assignees')) {
+            return $task->assignee?->manager_id === $user->id
+                || $task->assignees->contains('manager_id', $user->id);
+        }
+
+        return $task->assignees()->where('manager_id', $user->id)->exists();
     }
 }

@@ -108,6 +108,7 @@ export interface TaskRecord {
     priority: Priority;
     assignee_id: number;
     assignee: UserSummary;
+    assignees: UserSummary[];
     creator: UserSummary | null;
     project: {
         id: number;

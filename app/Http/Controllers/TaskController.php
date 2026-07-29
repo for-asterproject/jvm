@@ -48,6 +48,7 @@ class TaskController extends Controller
             ->with([
                 'project:id,name,division,manager_id',
                 'assignee:id,name,email',
+                'assignees:id,name,email,manager_id',
                 'creator:id,name',
                 'comments.user:id,name',
             ])
@@ -74,6 +75,7 @@ class TaskController extends Controller
             ->with([
                 'project:id,name,division,manager_id',
                 'assignee:id,name,email,manager_id',
+                'assignees:id,name,email,manager_id',
                 'creator:id,name',
                 'comments.user:id,name',
             ])
@@ -117,56 +119,66 @@ class TaskController extends Controller
     {
         $data = $request->validated();
         $project = $this->resolveProject($data['project_id'] ?? null);
+        $assigneeIds = $this->assigneeIds($data);
+        $errorField = array_key_exists('assignee_ids', $data) ? 'assignee_ids' : 'assignee_id';
 
         if ($project) {
             $this->authorize('create', [Task::class, $project]);
-            $this->ensureAssigneeParticipates($project, (int) $data['assignee_id']);
+            $this->ensureAssigneesParticipate($project, $assigneeIds, $errorField);
             $division = $project->division;
         } else {
             $this->authorize('create', Task::class);
-            $this->ensureStandaloneAssigneeAllowed($request->user(), (int) $data['assignee_id']);
+            $this->ensureStandaloneAssigneesAllowed($request->user(), $assigneeIds, $errorField);
             $division = $data['division'];
         }
 
-        Task::create([
+        unset($data['assignee_ids']);
+        $task = Task::create([
             ...$data,
             'project_id' => $project?->id,
             'division' => $division,
+            'assignee_id' => $assigneeIds->first(),
             'creator_id' => $request->user()->id,
         ]);
+        $task->assignees()->sync($assigneeIds);
 
         return back()->with('success', 'Задача создана.');
     }
 
     public function update(TaskRequest $request, Task $task): RedirectResponse
     {
-        $task->load(['project', 'assignee']);
+        $task->load(['project', 'assignee', 'assignees']);
         $this->authorize('update', $task);
         $data = $request->validated();
         $project = $this->resolveProject($data['project_id'] ?? null);
+        $assigneeIds = $this->assigneeIds($data);
+        $errorField = array_key_exists('assignee_ids', $data) ? 'assignee_ids' : 'assignee_id';
 
         if ($project) {
             $this->authorize('create', [Task::class, $project]);
-            $this->ensureAssigneeParticipates($project, (int) $data['assignee_id']);
+            $this->ensureAssigneesParticipate($project, $assigneeIds, $errorField);
             $division = $project->division;
         } else {
             $this->authorize('create', Task::class);
-            $this->ensureStandaloneAssigneeAllowed($request->user(), (int) $data['assignee_id']);
+            $this->ensureStandaloneAssigneesAllowed($request->user(), $assigneeIds, $errorField);
             $division = $data['division'] ?? $task->division;
         }
 
+        unset($data['assignee_ids']);
         $task->update([
             ...$data,
             'project_id' => $project?->id,
             'division' => $division,
+            'assignee_id' => $assigneeIds->first(),
         ]);
+        $task->assignees()->sync($assigneeIds);
 
         return back()->with('success', 'Задача обновлена.');
     }
 
     public function updateStatus(Request $request, Task $task): RedirectResponse
     {
-        $task->load(['project', 'assignee']);
+        $task->load(['project', 'assignee', 'assignees']);
         $this->authorize('changeStatus', $task);
         $validated = $request->validate([
             'status' => ['required', Rule::in(Task::STATUSES)],
@@ -178,7 +190,7 @@ class TaskController extends Controller
 
     public function comment(Request $request, Task $task): RedirectResponse
     {
-        $task->load(['project', 'assignee']);
+        $task->load(['project', 'assignee', 'assignees']);
         $this->authorize('comment', $task);
         $validated = $request->validate([
             'body' => ['required', 'string', 'max:5000'],
@@ -193,32 +205,42 @@ class TaskController extends Controller
 
     public function destroy(Task $task): RedirectResponse
     {
-        $task->load(['project', 'assignee']);
+        $task->load(['project', 'assignee', 'assignees']);
         $this->authorize('delete', $task);
         $task->delete();
 
         return back()->with('success', 'Задача удалена.');
     }
 
-    private function ensureAssigneeParticipates(Project $project, int $assigneeId): void
+    private function ensureAssigneesParticipate(Project $project, Collection $assigneeIds, string $errorField): void
     {
-        $allowed = $project->manager_id === $assigneeId
-            || $project->members->contains('id', $assigneeId);
+        $allowedIds = $project->members->pluck('id')->push($project->manager_id);
 
-        if (! $allowed) {
+        if ($assigneeIds->diff($allowedIds)->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'assignee_id' => 'Исполнитель должен быть участником проекта.',
+                $errorField => 'Все исполнители должны быть участниками проекта.',
             ]);
         }
     }
 
-    private function ensureStandaloneAssigneeAllowed(User $user, int $assigneeId): void
+    private function ensureStandaloneAssigneesAllowed(User $user, Collection $assigneeIds, string $errorField): void
     {
-        if (! $this->availableAssignees($user)->contains('id', $assigneeId)) {
+        $allowedIds = $this->availableAssignees($user)->pluck('id');
+
+        if ($assigneeIds->diff($allowedIds)->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'assignee_id' => 'Этому пользователю нельзя назначить задачу.',
+                $errorField => 'Одному или нескольким пользователям нельзя назначить задачу.',
             ]);
         }
+    }
+
+    private function assigneeIds(array $data): Collection
+    {
+        return collect($data['assignee_ids'] ?? [$data['assignee_id'] ?? null])
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
     }
 
     private function availableAssignees(User $user): Collection
