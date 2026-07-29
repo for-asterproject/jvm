@@ -4,7 +4,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, BriefcaseBusiness, CalendarDays, CircleDollarSign, Contact, FileSliders, Folder, LayoutGrid, ShieldCheck } from 'lucide-react';
+import { BookOpen, CalendarDays, CircleDollarSign, Contact, FileSliders, Folder, LayoutGrid, ListTodo, ShieldCheck } from 'lucide-react';
 import AppLogo from './app-logo';
 
 // Навигация нижнего меню
@@ -37,10 +37,10 @@ export function AppSidebar() {
             ? [
                   { title: 'Презентации', href: '/presentations', icon: FileSliders, role: '' },
                   ...(permissions.isStaff ? [{ title: 'Клиентская база', href: '/clients', icon: Contact, role: '' }] : []),
-                  { title: 'Проекты JVM', href: '/projects/jvm', icon: BriefcaseBusiness, role: '' },
+                  { title: 'Задачи JVM', href: '/tasks/jvm', icon: ListTodo, role: '' },
                   { title: 'Планирование', href: '/planning', icon: CalendarDays, role: '' },
-                  { title: 'Проекты PTL', href: '/projects/ptl', icon: BriefcaseBusiness, role: '' },
-                  { title: 'Проекты WAP', href: '/projects/wap', icon: BriefcaseBusiness, role: '' },
+                  { title: 'Задачи PTL', href: '/tasks/ptl', icon: ListTodo, role: '' },
+                  { title: 'Задачи WAP', href: '/tasks/wap', icon: ListTodo, role: '' },
               ]
             : []),
     ];

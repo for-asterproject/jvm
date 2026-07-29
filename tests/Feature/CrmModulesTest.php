@@ -432,6 +432,106 @@ class CrmModulesTest extends TestCase
         $this->assertSame('Изменённая задача', $task->fresh()->title);
     }
 
+    public function test_manager_can_create_standalone_division_task_for_direct_report(): void
+    {
+        $manager = $this->userWithRole('Руководитель');
+        $employee = $this->userWithRole('Сотрудник', $manager);
+        $outsider = $this->userWithRole('Сотрудник');
+
+        $this->actingAs($manager)
+            ->post('/tasks', $this->standaloneTaskPayload($employee, [
+                'division' => 'jvm',
+            ]))
+            ->assertRedirect();
+
+        $task = Task::firstOrFail();
+        $this->assertNull($task->project_id);
+        $this->assertSame('jvm', $task->division);
+        $this->assertSame($manager->id, $task->creator_id);
+
+        $this->actingAs($employee)
+            ->get('/tasks/jvm')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('crm/division-tasks')
+                ->where('division', 'jvm')
+                ->has('tasks', 1));
+
+        $this->actingAs($outsider)
+            ->get('/tasks/jvm')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('tasks', 0));
+
+        $this->actingAs($employee)
+            ->post('/tasks', $this->standaloneTaskPayload($employee))
+            ->assertForbidden();
+    }
+
+    public function test_manager_cannot_assign_standalone_task_to_another_managers_employee(): void
+    {
+        $manager = $this->userWithRole('Руководитель');
+        $otherManager = $this->userWithRole('Руководитель');
+        $otherEmployee = $this->userWithRole('Сотрудник', $otherManager);
+
+        $this->actingAs($manager)
+            ->post('/tasks', $this->standaloneTaskPayload($otherEmployee))
+            ->assertSessionHasErrors('assignee_id');
+
+        $this->assertDatabaseCount('tasks', 0);
+    }
+
+    public function test_project_task_keeps_its_division_and_survives_project_deletion(): void
+    {
+        $manager = $this->userWithRole('Руководитель');
+        $employee = $this->userWithRole('Сотрудник', $manager);
+        $project = Project::create([
+            ...$this->projectPayload(),
+            'division' => 'ptl',
+            'manager_id' => $manager->id,
+        ]);
+        $project->members()->attach($employee);
+
+        $this->actingAs($manager)
+            ->post('/tasks', $this->taskPayload($project, $employee))
+            ->assertRedirect();
+
+        $task = Task::firstOrFail();
+        $this->assertSame('ptl', $task->division);
+        $this->assertSame($project->id, $task->project_id);
+
+        $this->actingAs($manager)
+            ->delete("/projects/ptl/{$project->id}")
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('tasks', [
+            'id' => $task->id,
+            'project_id' => null,
+            'division' => 'ptl',
+        ]);
+    }
+
+    public function test_planning_excludes_standalone_tasks(): void
+    {
+        $manager = $this->userWithRole('Руководитель');
+        $employee = $this->userWithRole('Сотрудник', $manager);
+        $project = Project::create([
+            ...$this->projectPayload(),
+            'division' => 'wap',
+            'manager_id' => $manager->id,
+        ]);
+        $project->members()->attach($employee);
+
+        $this->actingAs($manager)->post('/tasks', $this->taskPayload($project, $employee))->assertRedirect();
+        $this->actingAs($manager)->post('/tasks', $this->standaloneTaskPayload($employee, ['division' => 'wap']))->assertRedirect();
+
+        $this->actingAs($employee)
+            ->get('/planning')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('crm/planning')
+                ->has('tasks', 1));
+    }
+
     public function test_only_administrator_can_use_role_and_manager_administration(): void
     {
         $administrator = $this->userWithRole('Администратор');
@@ -535,6 +635,21 @@ class CrmModulesTest extends TestCase
             'project_id' => $project->id,
             'title' => 'Подготовить документы',
             'description' => 'Описание задачи',
+            'status' => 'planned',
+            'priority' => 'normal',
+            'assignee_id' => $assignee->id,
+            'due_date' => '2026-08-15',
+            ...$overrides,
+        ];
+    }
+
+    private function standaloneTaskPayload(User $assignee, array $overrides = []): array
+    {
+        return [
+            'project_id' => null,
+            'division' => 'jvm',
+            'title' => 'Самостоятельная задача',
+            'description' => 'Задача без проекта',
             'status' => 'planned',
             'priority' => 'normal',
             'assignee_id' => $assignee->id,

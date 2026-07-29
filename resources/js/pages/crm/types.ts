@@ -100,6 +100,7 @@ export interface TaskCommentRecord {
 
 export interface TaskRecord {
     id: number;
+    division: 'jvm' | 'ptl' | 'wap';
     project_id: number;
     title: string;
     description: string | null;
@@ -120,6 +121,11 @@ export interface TaskRecord {
     can_change_status: boolean;
     can_comment: boolean;
     created_at: string;
+}
+
+export interface DivisionTaskRecord extends Omit<TaskRecord, 'project_id' | 'project'> {
+    project_id: number | null;
+    project: TaskRecord['project'] | null;
 }
 
 export type FormErrors = Record<string, string>;

@@ -76,6 +76,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/projects/{division}/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
 
     Route::get('/planning', [TaskController::class, 'index'])->name('planning.index');
+    Route::get('/tasks/{division}', [TaskController::class, 'division'])->name('tasks.division');
     Route::post('/tasks', [TaskController::class, 'store'])->name('tasks.store');
     Route::put('/tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');
     Route::patch('/tasks/{task}/status', [TaskController::class, 'updateStatus'])->name('tasks.status');
