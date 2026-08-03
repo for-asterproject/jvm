@@ -796,7 +796,7 @@ class CrmModulesTest extends TestCase
                 ->has('tasks', 2));
     }
 
-    public function test_planning_calendar_uses_project_tasks_and_excludes_standalone_tasks(): void
+    public function test_planning_calendar_uses_visible_tasks_by_division(): void
     {
         $manager = $this->userWithRole('Руководитель');
         $employee = $this->userWithRole('Сотрудник', $manager);
@@ -822,9 +822,13 @@ class CrmModulesTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('crm/planning')
-                ->where('tasks.0.project.division', 'ptl')
-                ->where('tasks.1.project.division', 'wap')
-                ->has('tasks', 2));
+                ->where('tasks.0.division', 'ptl')
+                ->where('tasks.1.division', 'wap')
+                ->where('tasks.1.project_id', null)
+                ->where('tasks.2.division', 'wap')
+                ->has('tasks', 3)
+                ->has('assignees')
+                ->where('canCreate', false));
     }
 
     public function test_only_administrator_can_use_role_and_manager_administration(): void

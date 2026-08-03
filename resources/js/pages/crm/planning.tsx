@@ -36,9 +36,9 @@ import {
     Trash2,
 } from 'lucide-react';
 import { FormEvent, useMemo, useState } from 'react';
-import { FormErrors, PlanningProject, Priority, TaskRecord, TaskStatus, UserSummary } from './types';
+import { DivisionTaskRecord, FormErrors, Priority, TaskStatus, UserSummary } from './types';
 
-type Division = PlanningProject['division'];
+type Division = DivisionTaskRecord['division'];
 type DivisionFilter = Division | 'all';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Календарь задач', href: '/planning' }];
@@ -94,8 +94,8 @@ const divisionStyles: Record<
 
 const weekdayLabels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-const makeEmptyForm = (projectId = '', dueDate = '') => ({
-    project_id: projectId,
+const makeEmptyForm = (division: Division, dueDate = '') => ({
+    division,
     title: '',
     description: '',
     priority: 'normal' as Priority,
@@ -124,12 +124,12 @@ const buildCalendarDays = (monthDate: Date) => {
     });
 };
 
-const taskIsOverdue = (task: TaskRecord) =>
+const taskIsOverdue = (task: DivisionTaskRecord) =>
     Boolean(task.due_date && task.status !== 'done' && new Date(`${task.due_date}T23:59:59`) < new Date());
 
-const taskAssignees = (task: TaskRecord) => (task.assignees.length ? task.assignees : [task.assignee]);
+const taskAssignees = (task: DivisionTaskRecord) => (task.assignees.length ? task.assignees : [task.assignee]);
 
-const assigneeSummary = (task: TaskRecord) => {
+const assigneeSummary = (task: DivisionTaskRecord) => {
     const assigned = taskAssignees(task);
     return assigned.length > 1 ? `${assigned[0].name} +${assigned.length - 1}` : assigned[0].name;
 };
@@ -138,10 +138,18 @@ const formatDate = (value: string) => parseDateKey(value).toLocaleDateString('ru
 
 const formatMonth = (date: Date) => date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 
-const taskProjectLabel = (task: TaskRecord) => `${divisionLabels[task.project.division]} · ${task.project.name}`;
+const taskDivisionLabel = (task: DivisionTaskRecord) => divisionLabels[task.division];
 
-function TaskCalendarCard({ task, compact = false, onOpen }: { task: TaskRecord; compact?: boolean; onOpen: (task: TaskRecord) => void }) {
-    const style = divisionStyles[task.project.division];
+function TaskCalendarCard({
+    task,
+    compact = false,
+    onOpen,
+}: {
+    task: DivisionTaskRecord;
+    compact?: boolean;
+    onOpen: (task: DivisionTaskRecord) => void;
+}) {
+    const style = divisionStyles[task.division];
 
     return (
         <button
@@ -158,7 +166,7 @@ function TaskCalendarCard({ task, compact = false, onOpen }: { task: TaskRecord;
                     </div>
                     {!compact && (
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] opacity-80">
-                            <span>{taskProjectLabel(task)}</span>
+                            <span>{taskDivisionLabel(task)}</span>
                             <span>{assigneeSummary(task)}</span>
                         </div>
                     )}
@@ -168,51 +176,49 @@ function TaskCalendarCard({ task, compact = false, onOpen }: { task: TaskRecord;
     );
 }
 
-export default function Planning({ projects, tasks }: { projects: PlanningProject[]; tasks: TaskRecord[] }) {
-    const manageableProjects = projects.filter((project) => project.can_manage);
+export default function Planning({
+    tasks,
+    assignees,
+    canCreate,
+}: {
+    tasks: DivisionTaskRecord[];
+    assignees: UserSummary[];
+    canCreate: boolean;
+}) {
     const today = dateKey(new Date());
     const [query, setQuery] = useState('');
     const [division, setDivision] = useState<DivisionFilter>('all');
-    const [projectFilter, setProjectFilter] = useState('all');
     const [assigneeFilter, setAssigneeFilter] = useState('all');
     const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
     const [selectedDate, setSelectedDate] = useState(today);
     const [formOpen, setFormOpen] = useState(false);
     const [detailOpen, setDetailOpen] = useState(false);
-    const [editing, setEditing] = useState<TaskRecord | null>(null);
+    const [editing, setEditing] = useState<DivisionTaskRecord | null>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
-    const [form, setForm] = useState(makeEmptyForm(String(manageableProjects[0]?.id ?? ''), today));
+    const [form, setForm] = useState(makeEmptyForm('jvm', today));
     const [errors, setErrors] = useState<FormErrors>({});
     const [processing, setProcessing] = useState(false);
     const [comment, setComment] = useState('');
 
     const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
 
-    const assignees = useMemo(() => {
-        const users = new Map<number, UserSummary>();
-        projects.forEach((project) => project.participants.forEach((user) => users.set(user.id, user)));
-        return [...users.values()].sort((a, b) => a.name.localeCompare(b.name));
-    }, [projects]);
-
     const filteredTasks = useMemo(() => {
         const needle = query.trim().toLowerCase();
 
         return tasks.filter((task) => {
-            const haystack = `${task.title} ${task.description ?? ''} ${taskProjectLabel(task)} ${taskAssignees(task)
+            const haystack = `${task.title} ${task.description ?? ''} ${taskDivisionLabel(task)} ${taskAssignees(task)
                 .map((assignee) => assignee.name)
                 .join(' ')}`.toLowerCase();
 
             return (
                 (!needle || haystack.includes(needle)) &&
-                (division === 'all' || task.project.division === division) &&
-                (projectFilter === 'all' || task.project_id === Number(projectFilter)) &&
+                (division === 'all' || task.division === division) &&
                 (assigneeFilter === 'all' || taskAssignees(task).some((assignee) => assignee.id === Number(assigneeFilter)))
             );
         });
-    }, [tasks, query, division, projectFilter, assigneeFilter]);
+    }, [tasks, query, division, assigneeFilter]);
 
     const calendarDays = useMemo(() => buildCalendarDays(monthDate), [monthDate]);
-    const selectedProject = projects.find((project) => project.id === Number(form.project_id));
     const scheduledTasks = filteredTasks.filter((task) => task.due_date);
     const unscheduledTasks = filteredTasks.filter((task) => !task.due_date);
     const overdueCount = filteredTasks.filter(taskIsOverdue).length;
@@ -220,7 +226,7 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
     const activeCount = filteredTasks.filter((task) => ['in_progress', 'review', 'needs_revision'].includes(task.status)).length;
 
     const tasksByDate = useMemo(() => {
-        const grouped = new Map<string, TaskRecord[]>();
+        const grouped = new Map<string, DivisionTaskRecord[]>();
         scheduledTasks.forEach((task) => {
             if (!task.due_date) return;
             grouped.set(task.due_date, [...(grouped.get(task.due_date) ?? []), task]);
@@ -237,21 +243,20 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
     };
 
     const openCreate = (dueDate = selectedDate) => {
-        const project = manageableProjects[0];
         setEditing(null);
         setForm({
-            ...makeEmptyForm(String(project?.id ?? ''), dueDate),
-            assignee_ids: project?.participants[0] ? [project.participants[0].id] : [],
+            ...makeEmptyForm(division === 'all' ? 'jvm' : division, dueDate),
+            assignee_ids: assignees[0] ? [assignees[0].id] : [],
         });
         setErrors({});
         setFormOpen(true);
     };
 
-    const openEdit = (task: TaskRecord) => {
+    const openEdit = (task: DivisionTaskRecord) => {
         setDetailOpen(false);
         setEditing(task);
         setForm({
-            project_id: String(task.project_id),
+            division: task.division,
             title: task.title,
             description: task.description ?? '',
             priority: task.priority,
@@ -262,7 +267,7 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
         setFormOpen(true);
     };
 
-    const openDetails = (task: TaskRecord) => {
+    const openDetails = (task: DivisionTaskRecord) => {
         setSelectedTaskId(task.id);
         setComment('');
         setDetailOpen(true);
@@ -280,13 +285,13 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
         };
 
         if (editing) {
-            router.put(`/tasks/${editing.id}`, form, options);
+            router.put(`/tasks/${editing.id}`, { ...form, project_id: null }, options);
         } else {
-            router.post('/tasks', form, options);
+            router.post('/tasks', { ...form, project_id: null }, options);
         }
     };
 
-    const remove = (task: TaskRecord) => {
+    const remove = (task: DivisionTaskRecord) => {
         if (!window.confirm(`Удалить задачу «${task.title}»?`)) return;
         setDetailOpen(false);
         router.delete(`/tasks/${task.id}`, { preserveScroll: true });
@@ -311,11 +316,11 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
             <CrmPageShell>
                 <CrmPageHeader
                     title="Календарь задач"
-                    description="Месячный календарь проектных задач JVM, PTL и WAP по срокам выполнения"
+                    description="Месячный календарь задач JVM, PTL и WAP по срокам выполнения"
                     icon={CalendarDays}
                     eyebrow="ASTER · TASK CALENDAR"
                     actions={
-                        manageableProjects.length ? (
+                        canCreate ? (
                             <Button onClick={() => openCreate()} className="bg-white text-[#123864] shadow-lg shadow-blue-950/20 hover:bg-blue-50">
                                 <Plus className="size-4" />
                                 Новая задача
@@ -325,14 +330,14 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                 />
 
                 <CrmStatsGrid>
-                    <CrmStatCard label="По фильтрам" value={filteredTasks.length} hint="Проектные задачи" icon={CalendarDays} tone="blue" />
+                    <CrmStatCard label="По фильтрам" value={filteredTasks.length} hint="Задачи направлений" icon={CalendarDays} tone="blue" />
                     <CrmStatCard label="На календаре" value={scheduledTasks.length} hint="Есть срок" icon={CalendarClock} tone="cyan" />
                     <CrmStatCard label="Сегодня" value={todayCount} hint="Срок сегодня" icon={Clock3} tone="amber" />
                     <CrmStatCard label="Просрочено" value={overdueCount} hint={`${activeCount} активных`} icon={AlertTriangle} tone="rose" />
                 </CrmStatsGrid>
 
                 <CrmToolbar>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         <div className="relative">
                             <Search className="absolute top-2.5 left-3 size-4 text-slate-400" />
                             <Input
@@ -355,18 +360,6 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                             ))}
                         </select>
                         <select
-                            value={projectFilter}
-                            onChange={(event) => setProjectFilter(event.target.value)}
-                            className="h-9 rounded-md border border-slate-200 bg-slate-50/80 px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
-                        >
-                            <option value="all">Все проекты</option>
-                            {projects.map((project) => (
-                                <option key={project.id} value={project.id}>
-                                    {project.division.toUpperCase()} · {project.name}
-                                </option>
-                            ))}
-                        </select>
-                        <select
                             value={assigneeFilter}
                             onChange={(event) => setAssigneeFilter(event.target.value)}
                             className="h-9 rounded-md border border-slate-200 bg-slate-50/80 px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
@@ -381,8 +374,8 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                     </div>
                 </CrmToolbar>
 
-                {projects.length === 0 ? (
-                    <EmptyState title="Нет доступных проектов">После назначения проекта здесь появятся задачи и календарь.</EmptyState>
+                {tasks.length === 0 ? (
+                    <EmptyState title="Задач пока нет">Создайте первую задачу направления, чтобы она появилась в календаре.</EmptyState>
                 ) : (
                     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_23rem]">
                         <CrmSurface className="overflow-hidden">
@@ -493,7 +486,7 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                                     <div className="text-xs font-semibold tracking-[0.14em] text-slate-400 uppercase">Выбранный день</div>
                                     <div className="mt-1 flex items-center justify-between gap-3">
                                         <h2 className="font-semibold text-slate-950 dark:text-white">{formatDate(selectedDate)}</h2>
-                                        {manageableProjects.length > 0 && (
+                                        {canCreate && (
                                             <Button type="button" size="sm" variant="outline" onClick={() => openCreate(selectedDate)}>
                                                 <Plus className="size-3.5" />
                                                 Задача
@@ -511,7 +504,7 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                                             <article
                                                 key={task.id}
                                                 onClick={() => openDetails(task)}
-                                                className={`group relative cursor-pointer overflow-hidden rounded-2xl border bg-gradient-to-br to-transparent p-4 shadow-[0_16px_40px_-34px_rgba(15,45,82,0.9)] transition hover:-translate-y-0.5 ${divisionStyles[task.project.division].chip} ${divisionStyles[task.project.division].glow}`}
+                                                className={`group relative cursor-pointer overflow-hidden rounded-2xl border bg-gradient-to-br to-transparent p-4 shadow-[0_16px_40px_-34px_rgba(15,45,82,0.9)] transition hover:-translate-y-0.5 ${divisionStyles[task.division].chip} ${divisionStyles[task.division].glow}`}
                                             >
                                                 <div className="mb-2 flex items-start justify-between gap-3">
                                                     <h3 className="font-semibold text-slate-950 dark:text-white">{task.title}</h3>
@@ -519,7 +512,7 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                                                         {statusLabels[task.status]}
                                                     </Badge>
                                                 </div>
-                                                <p className="text-xs font-medium tracking-wide uppercase">{taskProjectLabel(task)}</p>
+                                                <p className="text-xs font-medium tracking-wide uppercase">{taskDivisionLabel(task)}</p>
                                                 <div className="mt-3 flex items-center justify-between gap-3 border-t border-current/10 pt-3 text-xs">
                                                     <div className="flex min-w-0 items-center gap-2">
                                                         <CrmAvatarStack names={taskAssignees(task).map((assignee) => assignee.name)} />
@@ -572,26 +565,16 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                         </div>
                     </DialogHeader>
                     <form onSubmit={submit} className="grid gap-4 px-6 pb-6">
-                        <CrmFormSection title="Задача" description="Проект, название и ожидаемый результат">
-                            <FormField label="Проект" required error={errors.project_id}>
+                        <CrmFormSection title="Задача" description="Направление, название и ожидаемый результат">
+                            <FormField label="Направление" required error={errors.division}>
                                 <select
-                                    value={form.project_id}
-                                    onChange={(event) => {
-                                        const project = projects.find((item) => item.id === Number(event.target.value));
-                                        const participants = project?.participants ?? [];
-                                        const participantIds = new Set(participants.map((participant) => participant.id));
-                                        const selectedIds = form.assignee_ids.filter((id) => participantIds.has(id));
-                                        setForm({
-                                            ...form,
-                                            project_id: event.target.value,
-                                            assignee_ids: selectedIds.length ? selectedIds : participants[0] ? [participants[0].id] : [],
-                                        });
-                                    }}
+                                    value={form.division}
+                                    onChange={(event) => setForm({ ...form, division: event.target.value as Division })}
                                     className="border-input bg-background h-9 rounded-md border px-3"
                                 >
-                                    {manageableProjects.map((project) => (
-                                        <option key={project.id} value={project.id}>
-                                            {project.division.toUpperCase()} · {project.name}
+                                    {Object.entries(divisionLabels).map(([value, label]) => (
+                                        <option key={value} value={value}>
+                                            {label}
                                         </option>
                                     ))}
                                 </select>
@@ -607,7 +590,7 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                         <CrmFormSection title="Исполнение" description="Исполнители, срок и приоритет">
                             <FormField label="Исполнители" required error={errors.assignee_ids || errors['assignee_ids.0']}>
                                 <AssigneePicker
-                                    options={selectedProject?.participants ?? []}
+                                    options={assignees}
                                     selectedIds={form.assignee_ids}
                                     onChange={(assigneeIds) => setForm({ ...form, assignee_ids: assigneeIds })}
                                 />
@@ -666,8 +649,8 @@ export default function Planning({ projects, tasks }: { projects: PlanningProjec
                                         >
                                             {priorityLabels[selectedTask.priority]}
                                         </Badge>
-                                        <Badge variant="outline" className={divisionStyles[selectedTask.project.division].chip}>
-                                            {taskProjectLabel(selectedTask)}
+                                        <Badge variant="outline" className={divisionStyles[selectedTask.division].chip}>
+                                            {taskDivisionLabel(selectedTask)}
                                         </Badge>
                                     </div>
                                     <DialogTitle className="text-xl leading-snug">{selectedTask.title}</DialogTitle>

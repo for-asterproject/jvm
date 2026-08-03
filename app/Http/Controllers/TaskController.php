@@ -23,30 +23,8 @@ class TaskController extends Controller
         abort_unless($request->user()->hasCrmAccess(), 403);
         $user = $request->user();
 
-        $projects = Project::query()
-            ->visibleTo($user)
-            ->with(['manager:id,name,email', 'members:id,name,email'])
-            ->orderBy('name')
-            ->get()
-            ->map(function (Project $project) use ($user) {
-                $participants = collect([$project->manager])
-                    ->merge($project->members)
-                    ->unique('id')
-                    ->values()
-                    ->map->only(['id', 'name', 'email']);
-
-                return [
-                    'id' => $project->id,
-                    'name' => $project->name,
-                    'division' => $project->division,
-                    'manager' => $project->manager,
-                    'participants' => $participants,
-                    'can_manage' => $user->can('update', $project),
-                ];
-            });
-
         $tasks = Task::query()
-            ->whereIn('project_id', $projects->pluck('id'))
+            ->visibleTo($user)
             ->with([
                 'project:id,name,division,manager_id',
                 'assignee:id,name,email',
@@ -61,8 +39,9 @@ class TaskController extends Controller
             ->map(fn (Task $task) => $this->taskPayload($task, $user));
 
         return Inertia::render('crm/planning', [
-            'projects' => $projects,
             'tasks' => $tasks,
+            'assignees' => $this->availableAssignees($user),
+            'canCreate' => $user->can('create', Task::class),
         ]);
     }
 
