@@ -66,14 +66,16 @@ class TaskController extends Controller
         ]);
     }
 
-    public function division(Request $request, string $division): Response
+    public function overview(Request $request): Response
     {
-        $this->validateDivision($division);
         abort_unless($request->user()->hasCrmAccess(), 403);
         $user = $request->user();
+        $requestedDivision = strtolower((string) $request->query('division', ''));
+        $initialDivision = in_array($requestedDivision, Project::DIVISIONS, true)
+            ? $requestedDivision
+            : 'all';
 
         $tasks = Task::query()
-            ->where('division', $division)
             ->visibleTo($user)
             ->with([
                 'project:id,name,division,manager_id',
@@ -89,12 +91,12 @@ class TaskController extends Controller
             ->map(fn (Task $task) => $this->taskPayload($task, $user));
 
         $projects = Project::query()
-            ->where('division', $division)
-            ->when(! $user->isAdministrator(), fn ($projects) => $projects->where('manager_id', $user->id))
+            ->visibleTo($user)
             ->with(['manager:id,name,email', 'members:id,name,email'])
+            ->orderBy('division')
             ->orderBy('name')
             ->get()
-            ->map(function (Project $project) {
+            ->map(function (Project $project) use ($user) {
                 return [
                     'id' => $project->id,
                     'name' => $project->name,
@@ -105,18 +107,24 @@ class TaskController extends Controller
                         ->unique('id')
                         ->values()
                         ->map->only(['id', 'name', 'email']),
-                    'can_manage' => true,
+                    'can_manage' => $user->can('update', $project),
                 ];
             });
 
-        return Inertia::render('crm/division-tasks', [
-            'division' => $division,
-            'divisionLabel' => strtoupper($division),
+        return Inertia::render('crm/tasks', [
+            'initialDivision' => $initialDivision,
             'projects' => $projects,
             'tasks' => $tasks,
             'assignees' => $this->availableAssignees($user),
             'canCreate' => $user->can('create', Task::class),
         ]);
+    }
+
+    public function division(string $division): RedirectResponse
+    {
+        $this->validateDivision($division);
+
+        return redirect()->route('tasks.index', ['division' => $division]);
     }
 
     public function store(TaskRequest $request): RedirectResponse

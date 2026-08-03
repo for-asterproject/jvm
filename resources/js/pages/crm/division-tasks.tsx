@@ -39,6 +39,9 @@ import {
 import { FormEvent, useMemo, useState } from 'react';
 import { DivisionTaskRecord, FormErrors, PlanningProject, Priority, TaskStatus, UserSummary } from './types';
 
+type Division = PlanningProject['division'];
+type DivisionFilter = Division | 'all';
+
 const columns: {
     value: TaskStatus;
     label: string;
@@ -95,7 +98,13 @@ const priorityStripes: Record<Priority, string> = {
     high: 'bg-rose-500',
 };
 
-const makeEmptyForm = (division: string, assigneeIds: number[] = []) => ({
+const divisions: { value: Division; label: string }[] = [
+    { value: 'jvm', label: 'JVM' },
+    { value: 'ptl', label: 'PTL' },
+    { value: 'wap', label: 'WAP' },
+];
+
+const makeEmptyForm = (division: Division, assigneeIds: number[] = []) => ({
     division,
     project_id: '',
     title: '',
@@ -117,24 +126,35 @@ const assigneeSummary = (task: DivisionTaskRecord) => {
     return assigned.length > 1 ? `${assigned[0].name} +${assigned.length - 1}` : assigned[0].name;
 };
 
+const normalizeDivisionFilter = (division?: string): DivisionFilter =>
+    divisions.some((item) => item.value === division) ? (division as Division) : 'all';
+
+const defaultFormDivision = (division: DivisionFilter): Division => (division === 'all' ? 'jvm' : division);
+
+const projectLabel = (task: DivisionTaskRecord) => `${task.division.toUpperCase()} · ${task.project?.name ?? 'Без проекта'}`;
+
 export default function DivisionTasks({
     division,
-    divisionLabel,
+    initialDivision,
     projects,
     tasks,
     assignees,
     canCreate,
 }: {
-    division: 'jvm' | 'ptl' | 'wap';
-    divisionLabel: string;
+    division?: Division;
+    divisionLabel?: string;
+    initialDivision?: DivisionFilter;
     projects: PlanningProject[];
     tasks: DivisionTaskRecord[];
     assignees: UserSummary[];
     canCreate: boolean;
 }) {
-    const breadcrumbs: BreadcrumbItem[] = [{ title: `Задачи ${divisionLabel}`, href: `/tasks/${division}` }];
+    const resolvedInitialDivision = division ?? normalizeDivisionFilter(initialDivision);
+    const breadcrumbs: BreadcrumbItem[] = [{ title: 'Задачи', href: '/tasks' }];
+    const manageableProjects = projects.filter((project) => project.can_manage);
     const [view, setView] = useState<'list' | 'kanban'>('list');
     const [query, setQuery] = useState('');
+    const [divisionFilter, setDivisionFilter] = useState<DivisionFilter>(resolvedInitialDivision);
     const [statusFilter, setStatusFilter] = useState('all');
     const [priorityFilter, setPriorityFilter] = useState('all');
     const [assigneeFilter, setAssigneeFilter] = useState('all');
@@ -143,7 +163,7 @@ export default function DivisionTasks({
     const [detailOpen, setDetailOpen] = useState(false);
     const [editing, setEditing] = useState<DivisionTaskRecord | null>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
-    const [form, setForm] = useState(makeEmptyForm(division, assignees[0] ? [assignees[0].id] : []));
+    const [form, setForm] = useState(makeEmptyForm(defaultFormDivision(resolvedInitialDivision), assignees[0] ? [assignees[0].id] : []));
     const [errors, setErrors] = useState<FormErrors>({});
     const [processing, setProcessing] = useState(false);
     const [comment, setComment] = useState('');
@@ -153,12 +173,24 @@ export default function DivisionTasks({
     const formAssignees = selectedProject ? selectedProject.participants : assignees;
 
     const projectOptions = useMemo(() => {
-        const options = new Map<number, string>();
-        projects.forEach((project) => options.set(project.id, project.name));
+        const options = new Map<number, { division: Division; label: string; name: string }>();
+        projects.forEach((project) =>
+            options.set(project.id, {
+                division: project.division,
+                label: `${project.division.toUpperCase()} · ${project.name}`,
+                name: project.name,
+            }),
+        );
         tasks.forEach((task) => {
-            if (task.project) options.set(task.project.id, task.project.name);
+            if (task.project) {
+                options.set(task.project.id, {
+                    division: task.project.division,
+                    label: `${task.project.division.toUpperCase()} · ${task.project.name}`,
+                    name: task.project.name,
+                });
+            }
         });
-        return [...options.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+        return [...options.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label));
     }, [projects, tasks]);
 
     const filteredTasks = useMemo(() => {
@@ -166,16 +198,17 @@ export default function DivisionTasks({
         return tasks.filter((task) => {
             const assigned = taskAssignees(task);
             const haystack =
-                `${task.title} ${task.description ?? ''} ${task.project?.name ?? ''} ${assigned.map((item) => item.name).join(' ')}`.toLowerCase();
+                `${task.title} ${task.description ?? ''} ${projectLabel(task)} ${assigned.map((item) => item.name).join(' ')}`.toLowerCase();
             return (
                 (!needle || haystack.includes(needle)) &&
+                (divisionFilter === 'all' || task.division === divisionFilter) &&
                 (statusFilter === 'all' || task.status === statusFilter) &&
                 (priorityFilter === 'all' || task.priority === priorityFilter) &&
                 (assigneeFilter === 'all' || assigned.some((item) => item.id === Number(assigneeFilter))) &&
                 (projectFilter === 'all' || (projectFilter === 'none' ? task.project_id === null : task.project_id === Number(projectFilter)))
             );
         });
-    }, [tasks, query, statusFilter, priorityFilter, assigneeFilter, projectFilter]);
+    }, [tasks, query, divisionFilter, statusFilter, priorityFilter, assigneeFilter, projectFilter]);
 
     const visibleAssignees = useMemo(() => {
         const users = new Map<number, UserSummary>();
@@ -190,7 +223,7 @@ export default function DivisionTasks({
 
     const openCreate = () => {
         setEditing(null);
-        setForm(makeEmptyForm(division, assignees[0] ? [assignees[0].id] : []));
+        setForm(makeEmptyForm(defaultFormDivision(divisionFilter), assignees[0] ? [assignees[0].id] : []));
         setErrors({});
         setFormOpen(true);
     };
@@ -199,7 +232,7 @@ export default function DivisionTasks({
         setDetailOpen(false);
         setEditing(task);
         setForm({
-            division,
+            division: task.division,
             project_id: String(task.project_id ?? ''),
             title: task.title,
             description: task.description ?? '',
@@ -256,13 +289,13 @@ export default function DivisionTasks({
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title={`Задачи ${divisionLabel}`} />
+            <Head title="Задачи" />
             <CrmPageShell>
                 <CrmPageHeader
-                    title={`Задачи ${divisionLabel}`}
-                    description={`Рабочие задачи направления ${divisionLabel}: ответственные, сроки и статусы`}
+                    title="Задачи"
+                    description="Единый список задач JVM, PTL и WAP: ответственные, сроки и статусы"
                     icon={ListTodo}
-                    eyebrow={`ASTER · ${divisionLabel} TASKS`}
+                    eyebrow="ASTER · TASKS"
                     actions={
                         canCreate ? (
                             <Button onClick={openCreate} className="bg-white text-[#123864] shadow-lg shadow-blue-950/20 hover:bg-blue-50">
@@ -274,14 +307,14 @@ export default function DivisionTasks({
                 />
 
                 <CrmStatsGrid>
-                    <CrmStatCard label="Все задачи" value={tasks.length} hint={`Направление ${divisionLabel}`} icon={ListTodo} tone="blue" />
+                    <CrmStatCard label="Все задачи" value={tasks.length} hint="JVM, PTL и WAP" icon={ListTodo} tone="blue" />
                     <CrmStatCard label="Запланировано" value={plannedCount} hint="Ожидают начала" icon={CircleDot} tone="violet" />
                     <CrmStatCard label="В процессе" value={activeCount} hint="Работа и проверка" icon={Clock3} tone="cyan" />
                     <CrmStatCard label="Просрочено" value={overdueCount} hint="Требуют внимания" icon={AlertTriangle} tone="rose" />
                 </CrmStatsGrid>
 
                 <CrmToolbar>
-                    <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(13rem,1fr)_9.5rem_9.5rem_11rem_11rem_auto] 2xl:items-center">
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(13rem,1fr)_8.5rem_9.5rem_9.5rem_11rem_11rem_auto] 2xl:items-center">
                         <div className="relative">
                             <Search className="absolute top-2.5 left-3 size-4 text-slate-400" />
                             <Input
@@ -291,6 +324,18 @@ export default function DivisionTasks({
                                 className="border-slate-200 bg-slate-50/80 pl-9 shadow-none focus-visible:bg-white dark:border-white/10 dark:bg-white/5"
                             />
                         </div>
+                        <select
+                            value={divisionFilter}
+                            onChange={(event) => setDivisionFilter(event.target.value as DivisionFilter)}
+                            className="border-input bg-background h-9 min-w-0 rounded-md border px-3 text-sm"
+                        >
+                            <option value="all">Все направления</option>
+                            {divisions.map((item) => (
+                                <option key={item.value} value={item.value}>
+                                    {item.label}
+                                </option>
+                            ))}
+                        </select>
                         <select
                             value={statusFilter}
                             onChange={(event) => setStatusFilter(event.target.value)}
@@ -334,9 +379,9 @@ export default function DivisionTasks({
                         >
                             <option value="all">Все проекты</option>
                             <option value="none">Без проекта</option>
-                            {projectOptions.map(([id, name]) => (
+                            {projectOptions.map(([id, project]) => (
                                 <option key={id} value={id}>
-                                    {name}
+                                    {project.label}
                                 </option>
                             ))}
                         </select>
@@ -388,7 +433,7 @@ export default function DivisionTasks({
                                         </Badge>
                                     </div>
                                     <div className="mt-3 text-xs font-medium text-blue-600 dark:text-blue-300">
-                                        {task.project?.name ?? 'Без проекта'}
+                                        {projectLabel(task)}
                                     </div>
                                     <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
                                         <div className="flex min-w-0 items-center gap-2">
@@ -442,7 +487,7 @@ export default function DivisionTasks({
                                                     <div className="mt-1 line-clamp-1 text-xs text-slate-500">{task.description}</div>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{task.project?.name ?? 'Без проекта'}</td>
+                                            <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{projectLabel(task)}</td>
                                             <td className="px-4 py-4">
                                                 <div className="flex items-center gap-2">
                                                     <CrmAvatarStack names={taskAssignees(task).map((assignee) => assignee.name)} />
@@ -513,7 +558,7 @@ export default function DivisionTasks({
                                                         </h3>
                                                     </div>
                                                     <p className="mt-2 pl-1 text-[11px] font-medium tracking-wide text-blue-600 uppercase dark:text-blue-300">
-                                                        {task.project?.name ?? 'Без проекта'}
+                                                        {projectLabel(task)}
                                                     </p>
                                                     <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 dark:border-white/6">
                                                         <div className="flex min-w-0 items-center gap-2">
@@ -551,37 +596,54 @@ export default function DivisionTasks({
                     <DialogHeader>
                         <div className="border-b border-slate-100 px-6 py-5 dark:border-white/8">
                             <div className="mb-1 text-[10px] font-semibold tracking-[0.16em] text-blue-600 uppercase dark:text-blue-300">
-                                ASTER · {divisionLabel} TASK
+                                ASTER · TASK
                             </div>
                             <DialogTitle>{editing ? 'Редактировать задачу' : 'Новая задача'}</DialogTitle>
                         </div>
                     </DialogHeader>
                     <form onSubmit={submit} className="grid gap-4 px-6 pb-6">
-                        <CrmFormSection title="Задача" description="Название, ожидаемый результат и необязательный проект">
-                            <FormField label="Проект" error={errors.project_id}>
-                                <select
-                                    value={form.project_id}
-                                    onChange={(event) => {
-                                        const project = projects.find((item) => item.id === Number(event.target.value));
-                                        const available = project?.participants ?? assignees;
-                                        const availableIds = new Set(available.map((item) => item.id));
-                                        const selectedIds = form.assignee_ids.filter((id) => availableIds.has(id));
-                                        setForm({
-                                            ...form,
-                                            project_id: event.target.value,
-                                            assignee_ids: selectedIds.length ? selectedIds : available[0] ? [available[0].id] : [],
-                                        });
-                                    }}
-                                    className="border-input bg-background h-9 rounded-md border px-3"
-                                >
-                                    <option value="">Без проекта</option>
-                                    {projects.map((project) => (
-                                        <option key={project.id} value={project.id}>
-                                            {project.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </FormField>
+                        <CrmFormSection title="Задача" description="Направление, проект, название и ожидаемый результат">
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <FormField label="Направление" required error={errors.division}>
+                                    <select
+                                        value={selectedProject?.division ?? form.division}
+                                        onChange={(event) => setForm({ ...form, division: event.target.value as Division })}
+                                        disabled={Boolean(selectedProject)}
+                                        className="border-input bg-background h-9 rounded-md border px-3 disabled:opacity-70"
+                                    >
+                                        {divisions.map((item) => (
+                                            <option key={item.value} value={item.value}>
+                                                {item.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </FormField>
+                                <FormField label="Проект" error={errors.project_id}>
+                                    <select
+                                        value={form.project_id}
+                                        onChange={(event) => {
+                                            const project = projects.find((item) => item.id === Number(event.target.value));
+                                            const available = project?.participants ?? assignees;
+                                            const availableIds = new Set(available.map((item) => item.id));
+                                            const selectedIds = form.assignee_ids.filter((id) => availableIds.has(id));
+                                            setForm({
+                                                ...form,
+                                                division: project?.division ?? form.division,
+                                                project_id: event.target.value,
+                                                assignee_ids: selectedIds.length ? selectedIds : available[0] ? [available[0].id] : [],
+                                            });
+                                        }}
+                                        className="border-input bg-background h-9 rounded-md border px-3"
+                                    >
+                                        <option value="">Без проекта</option>
+                                        {manageableProjects.map((project) => (
+                                            <option key={project.id} value={project.id}>
+                                                {project.division.toUpperCase()} · {project.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </FormField>
+                            </div>
                             <FormField label="Название" required error={errors.title}>
                                 <Input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
                             </FormField>
@@ -645,7 +707,7 @@ export default function DivisionTasks({
                                             {priorityLabels[selectedTask.priority]}
                                         </Badge>
                                         <Badge variant="outline">
-                                            {divisionLabel} · {selectedTask.project?.name ?? 'Без проекта'}
+                                            {projectLabel(selectedTask)}
                                         </Badge>
                                     </div>
                                     <DialogTitle className="text-xl leading-snug">{selectedTask.title}</DialogTitle>

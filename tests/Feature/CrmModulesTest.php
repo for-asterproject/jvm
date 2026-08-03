@@ -453,15 +453,20 @@ class CrmModulesTest extends TestCase
         $this->assertSame($manager->id, $task->creator_id);
 
         $this->actingAs($employee)
-            ->get('/tasks/jvm')
+            ->get('/tasks')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('crm/division-tasks')
-                ->where('division', 'jvm')
+                ->component('crm/tasks')
+                ->where('initialDivision', 'all')
+                ->where('tasks.0.division', 'jvm')
                 ->has('tasks', 1));
 
-        $this->actingAs($outsider)
+        $this->actingAs($employee)
             ->get('/tasks/jvm')
+            ->assertRedirect('/tasks?division=jvm');
+
+        $this->actingAs($outsider)
+            ->get('/tasks')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('tasks', 0));
 
@@ -504,7 +509,7 @@ class CrmModulesTest extends TestCase
         );
 
         $this->actingAs($secondEmployee)
-            ->get('/tasks/jvm')
+            ->get('/tasks')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('tasks', 1)
@@ -763,6 +768,32 @@ class CrmModulesTest extends TestCase
             'project_id' => null,
             'division' => 'ptl',
         ]);
+    }
+
+    public function test_tasks_index_combines_project_and_standalone_tasks_across_divisions(): void
+    {
+        $manager = $this->userWithRole('Руководитель');
+        $employee = $this->userWithRole('Сотрудник', $manager);
+        $project = Project::create([
+            ...$this->projectPayload(),
+            'division' => 'ptl',
+            'manager_id' => $manager->id,
+        ]);
+        $project->members()->attach($employee);
+
+        $this->actingAs($manager)->post('/tasks', $this->taskPayload($project, $employee))->assertRedirect();
+        $this->actingAs($manager)->post('/tasks', $this->standaloneTaskPayload($employee, ['division' => 'wap']))->assertRedirect();
+
+        $this->actingAs($employee)
+            ->get('/tasks')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('crm/tasks')
+                ->where('initialDivision', 'all')
+                ->where('tasks.0.division', 'wap')
+                ->where('tasks.0.project_id', null)
+                ->where('tasks.1.division', 'ptl')
+                ->has('tasks', 2));
     }
 
     public function test_planning_excludes_standalone_tasks(): void
