@@ -38,7 +38,7 @@ export function AppSidebar() {
                   { title: 'Презентации', href: '/presentations', icon: FileSliders, role: '' },
                   ...(permissions.isStaff ? [{ title: 'Клиентская база', href: '/clients', icon: Contact, role: '' }] : []),
                   { title: 'Задачи', href: '/tasks', icon: ListTodo, role: '' },
-                  { title: 'Планирование', href: '/planning', icon: CalendarDays, role: '' },
+                  { title: 'Календарь задач', href: '/planning', icon: CalendarDays, role: '' },
               ]
             : []),
     ];

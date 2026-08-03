@@ -796,26 +796,35 @@ class CrmModulesTest extends TestCase
                 ->has('tasks', 2));
     }
 
-    public function test_planning_excludes_standalone_tasks(): void
+    public function test_planning_calendar_uses_project_tasks_and_excludes_standalone_tasks(): void
     {
         $manager = $this->userWithRole('Руководитель');
         $employee = $this->userWithRole('Сотрудник', $manager);
-        $project = Project::create([
+        $wapProject = Project::create([
             ...$this->projectPayload(),
             'division' => 'wap',
             'manager_id' => $manager->id,
         ]);
-        $project->members()->attach($employee);
+        $ptlProject = Project::create([
+            ...$this->projectPayload(['name' => 'PTL проект']),
+            'division' => 'ptl',
+            'manager_id' => $manager->id,
+        ]);
+        $wapProject->members()->attach($employee);
+        $ptlProject->members()->attach($employee);
 
-        $this->actingAs($manager)->post('/tasks', $this->taskPayload($project, $employee))->assertRedirect();
+        $this->actingAs($manager)->post('/tasks', $this->taskPayload($wapProject, $employee))->assertRedirect();
         $this->actingAs($manager)->post('/tasks', $this->standaloneTaskPayload($employee, ['division' => 'wap']))->assertRedirect();
+        $this->actingAs($manager)->post('/tasks', $this->taskPayload($ptlProject, $employee))->assertRedirect();
 
         $this->actingAs($employee)
             ->get('/planning')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('crm/planning')
-                ->has('tasks', 1));
+                ->where('tasks.0.project.division', 'ptl')
+                ->where('tasks.1.project.division', 'wap')
+                ->has('tasks', 2));
     }
 
     public function test_only_administrator_can_use_role_and_manager_administration(): void
