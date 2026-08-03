@@ -10,8 +10,11 @@ class Client extends Model
 {
     use HasFactory;
 
+    public const DIVISIONS = ['jvm', 'ptl', 'wap'];
+
     protected $fillable = [
         'company_name',
+        'division',
         'bin',
         'contact_name',
         'position',

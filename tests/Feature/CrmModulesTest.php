@@ -36,6 +36,7 @@ class CrmModulesTest extends TestCase
 
         $this->actingAs($employee)->post('/clients', [
             'company_name' => 'Aster Client',
+            'division' => 'ptl',
             'bin' => '123456789012',
             'contact_name' => 'Алия',
             'position' => 'Директор',
@@ -48,16 +49,26 @@ class CrmModulesTest extends TestCase
 
         $client = Client::firstOrFail();
         $this->assertSame($employee->id, $client->created_by);
+        $this->assertSame('ptl', $client->division);
         $this->actingAs($employee)->put("/clients/{$client->id}", [
             'company_name' => 'Aster Client Updated',
+            'division' => 'wap',
             'bin' => '123456789012',
             'status' => 'inactive',
         ])->assertRedirect();
         $this->assertDatabaseHas('clients', [
             'id' => $client->id,
             'company_name' => 'Aster Client Updated',
+            'division' => 'wap',
             'status' => 'inactive',
         ]);
+
+        $this->actingAs($employee)
+            ->get('/clients')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('crm/clients')
+                ->where('clients.0.division', 'wap'));
 
         $this->actingAs($consultant)->get('/clients')->assertForbidden();
         $this->actingAs($consultant)->delete("/clients/{$client->id}")->assertForbidden();

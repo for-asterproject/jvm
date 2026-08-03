@@ -24,8 +24,21 @@ import { ClientRecord, FormErrors } from './types';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Клиентская база', href: '/clients' }];
 
+const divisionLabels: Record<ClientRecord['division'], string> = {
+    jvm: 'JVM',
+    ptl: 'PTL',
+    wap: 'WAP',
+};
+
+const divisionBadgeClasses: Record<ClientRecord['division'], string> = {
+    jvm: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200',
+    ptl: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200',
+    wap: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100',
+};
+
 const emptyForm = {
     company_name: '',
+    division: 'jvm' as ClientRecord['division'],
     bin: '',
     contact_name: '',
     position: '',
@@ -39,6 +52,7 @@ const emptyForm = {
 export default function Clients({ clients }: { clients: ClientRecord[] }) {
     const [query, setQuery] = useState('');
     const [status, setStatus] = useState('all');
+    const [division, setDivision] = useState<'all' | ClientRecord['division']>('all');
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState<ClientRecord | null>(null);
     const [form, setForm] = useState(emptyForm);
@@ -50,14 +64,15 @@ export default function Clients({ clients }: { clients: ClientRecord[] }) {
 
         return clients.filter((client) => {
             const matchesStatus = status === 'all' || client.status === status;
-            const haystack = [client.company_name, client.bin, client.contact_name, client.phone, client.email]
+            const matchesDivision = division === 'all' || client.division === division;
+            const haystack = [client.company_name, divisionLabels[client.division], client.bin, client.contact_name, client.phone, client.email]
                 .filter(Boolean)
                 .join(' ')
                 .toLowerCase();
 
-            return matchesStatus && (!needle || haystack.includes(needle));
+            return matchesStatus && matchesDivision && (!needle || haystack.includes(needle));
         });
-    }, [clients, query, status]);
+    }, [clients, query, status, division]);
     const activeClients = clients.filter((client) => client.status === 'active').length;
     const inactiveClients = clients.length - activeClients;
     const clientsWithoutContact = clients.filter((client) => !client.phone && !client.email).length;
@@ -73,6 +88,7 @@ export default function Clients({ clients }: { clients: ClientRecord[] }) {
         setEditing(client);
         setForm({
             company_name: client.company_name,
+            division: client.division,
             bin: client.bin ?? '',
             contact_name: client.contact_name ?? '',
             position: client.position ?? '',
@@ -144,10 +160,22 @@ export default function Clients({ clients }: { clients: ClientRecord[] }) {
                             <Input
                                 value={query}
                                 onChange={(event) => setQuery(event.target.value)}
-                                placeholder="Поиск по компании, БИН или контакту..."
+                                placeholder="Поиск по компании, направлению, БИН или контакту..."
                                 className="border-slate-200 bg-slate-50/80 pl-9 shadow-none focus-visible:bg-white dark:border-white/10 dark:bg-white/5"
                             />
                         </div>
+                        <select
+                            value={division}
+                            onChange={(event) => setDivision(event.target.value as 'all' | ClientRecord['division'])}
+                            className="h-9 rounded-md border border-slate-200 bg-slate-50/80 px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                        >
+                            <option value="all">Все направления</option>
+                            {Object.entries(divisionLabels).map(([value, label]) => (
+                                <option key={value} value={value}>
+                                    {label}
+                                </option>
+                            ))}
+                        </select>
                         <select
                             value={status}
                             onChange={(event) => setStatus(event.target.value)}
@@ -173,6 +201,7 @@ export default function Clients({ clients }: { clients: ClientRecord[] }) {
                                     <thead className="border-b border-slate-200/70 bg-slate-50/75 text-left dark:border-white/8 dark:bg-white/[0.025]">
                                         <tr className="text-[10px] tracking-[0.09em] text-slate-500 uppercase dark:text-slate-400">
                                             <th className="px-5 py-3.5 font-semibold">Компания</th>
+                                            <th className="px-5 py-3.5 font-semibold">Направление</th>
                                             <th className="px-5 py-3.5 font-semibold">Контакт</th>
                                             <th className="px-5 py-3.5 font-semibold">Связь</th>
                                             <th className="px-5 py-3.5 font-semibold">Статус</th>
@@ -197,6 +226,11 @@ export default function Clients({ clients }: { clients: ClientRecord[] }) {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                </td>
+                                                <td className="px-5 py-4 align-middle">
+                                                    <Badge variant="outline" className={divisionBadgeClasses[client.division]}>
+                                                        {divisionLabels[client.division]}
+                                                    </Badge>
                                                 </td>
                                                 <td className="px-5 py-4 align-middle">
                                                     <div className="font-medium text-slate-700 dark:text-slate-200">
@@ -281,6 +315,11 @@ export default function Clients({ clients }: { clients: ClientRecord[] }) {
                                                     <p className="text-xs text-slate-500 dark:text-slate-400">
                                                         {client.bin ? `БИН ${client.bin}` : 'БИН не указан'}
                                                     </p>
+                                                    <div className="mt-2">
+                                                        <Badge variant="outline" className={divisionBadgeClasses[client.division]}>
+                                                            {divisionLabels[client.division]}
+                                                        </Badge>
+                                                    </div>
                                                 </div>
                                                 <Badge
                                                     variant="outline"
@@ -340,6 +379,19 @@ export default function Clients({ clients }: { clients: ClientRecord[] }) {
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <FormField label="Компания" required error={errors.company_name}>
                                     <Input value={form.company_name} onChange={(event) => setForm({ ...form, company_name: event.target.value })} />
+                                </FormField>
+                                <FormField label="Направление" required error={errors.division}>
+                                    <select
+                                        value={form.division}
+                                        onChange={(event) => setForm({ ...form, division: event.target.value as ClientRecord['division'] })}
+                                        className="border-input bg-background h-9 rounded-md border px-3"
+                                    >
+                                        {Object.entries(divisionLabels).map(([value, label]) => (
+                                            <option key={value} value={value}>
+                                                {label}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </FormField>
                                 <FormField label="БИН" error={errors.bin}>
                                     <Input value={form.bin} onChange={(event) => setForm({ ...form, bin: event.target.value })} />

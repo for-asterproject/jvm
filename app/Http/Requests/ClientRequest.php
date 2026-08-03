@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Client;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -18,6 +19,7 @@ class ClientRequest extends FormRequest
 
         return [
             'company_name' => ['required', 'string', 'max:255'],
+            'division' => ['required', Rule::in(Client::DIVISIONS)],
             'bin' => ['nullable', 'string', 'max:20', Rule::unique('clients', 'bin')->ignore($clientId)],
             'contact_name' => ['nullable', 'string', 'max:255'],
             'position' => ['nullable', 'string', 'max:255'],

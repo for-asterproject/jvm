@@ -8,6 +8,7 @@ export interface UserSummary {
 export interface ClientRecord {
     id: number;
     company_name: string;
+    division: 'jvm' | 'ptl' | 'wap';
     bin: string | null;
     contact_name: string | null;
     position: string | null;
