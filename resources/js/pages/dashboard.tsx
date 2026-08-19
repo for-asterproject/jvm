@@ -11,12 +11,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
+import { buildPriceOfferPdfBlob, formatAmount, type InvoiceItem } from '@/lib/price-offer-pdf';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { Page, Text, View, Document, pdf, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import { saveAs } from 'file-saver';
 
 // Хлебные крошки
@@ -26,14 +26,6 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/dashboard',
     },
 ];
-
-// Регистрируем шрифт с поддержкой кириллицы
-import RobotoRegular from '@/fonts/Roboto-Regular.ttf';
-
-Font.register({
-    family: 'Roboto',
-    src: RobotoRegular,
-});
 
 // Интерфейс для продуктов
 interface Product {
@@ -54,559 +46,18 @@ interface CompanyDetails {
     vat_rate: number;
 }
 
-interface InvoicePDFProps {
-    items: InvoiceItem[];
-    companyDetails: string;
-    recipient: string;
-    director: string;
-    address: string;
-    phone: string;
-    originPoint: string;
-    deliveryPoint: string;
-    supplyTerms: string;
-    prepaymentPercent: string;
-    includeVat: boolean;
-    vatRate: number;
-    invoiceNumber: string;
-    invoiceDate: string;
-}
-
-interface InvoiceItem {
+// Клиент из «Клиентской базы» для подстановки реквизитов получателя
+interface ClientOption {
     id: number;
-    name: string;
-    is_service: boolean;
-    quantity: number;
-    unitPrice: number;
+    company_name: string;
+    division: string;
+    contact_name: string | null;
+    position: string | null;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    status: string;
 }
-
-// Стили для PDF
-const styles = StyleSheet.create({
-    page: {
-        padding: 30,
-        fontSize: 12,
-        fontFamily: 'Roboto',
-    },
-    logo: {
-        width: 135,
-        height: 58,
-        marginBottom: 20,
-        alignSelf: 'center',
-    },
-    header: {
-        fontSize: 18,
-        fontWeight: 800,
-        textAlign: 'center',
-        marginBottom: 20,
-    },
-    dateRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 20,
-    },
-    table: {
-        marginVertical: 10,
-    },
-    tableRow: {
-        flexDirection: 'row',
-    },
-    tableCol: {
-        width: '25%',
-        borderWidth: 1,
-        borderColor: '#000',
-        textAlign: 'right',
-        padding: 5,
-    },
-    tableColID: {
-        width: '10%',
-        borderWidth: 1,
-        borderColor: '#000',
-        textAlign: 'center',
-        padding: 5,
-    },
-    tableColName: {
-        width: '40%',
-        borderWidth: 1,
-        borderColor: '#000',
-        padding: 5,
-    },
-    tableHeader: {
-        fontWeight: 'bold',
-        backgroundColor: '#f0f0f0',
-    },
-    footer: {
-        marginTop: 20,
-        textAlign: 'right',
-        fontSize: 12,
-    },
-    summaryBlock: {
-        marginTop: 16,
-        marginLeft: 'auto',
-        width: '52%',
-    },
-    summaryRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        borderBottomWidth: 1,
-        borderBottomColor: '#d4d4d8',
-        paddingVertical: 4,
-    },
-    summaryLabel: {
-        fontWeight: 'bold',
-    },
-    invoiceHeadingRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 18,
-        gap: 16,
-    },
-    invoiceCompanyBlock: {
-        width: '54%',
-        fontSize: 10,
-        lineHeight: 1.35,
-    },
-    invoiceMetaBlock: {
-        width: '42%',
-        alignItems: 'flex-end',
-    },
-    invoiceTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        marginBottom: 8,
-        color: '#111827',
-    },
-    invoiceMetaText: {
-        fontSize: 11,
-        color: '#374151',
-        marginBottom: 4,
-    },
-    recipientBox: {
-        // borderWidth: 1,
-        // borderColor: '#9ca3af',
-        padding: 3,
-        marginBottom: 10,
-    },
-    recipientLabel: {
-        fontSize: 11,
-        fontWeight: 'bold',
-        color: '#111827',
-        marginBottom: 6,
-    },
-    recipientText: {
-        fontSize: 11,
-        color: '#111827',
-        marginBottom: 2,
-    },
-    invoiceInfoTable: {
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: '#d4d4d8',
-    },
-    invoiceInfoRow: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: '#d4d4d8',
-    },
-    invoiceInfoHeaderCell: {
-        flex: 1,
-        backgroundColor: '#f3f4f6',
-        padding: 6,
-        fontSize: 9,
-        fontWeight: 'bold',
-        borderRightWidth: 1,
-        borderRightColor: '#d4d4d8',
-    },
-    invoiceInfoValueCell: {
-        flex: 1,
-        padding: 6,
-        fontSize: 9,
-        borderRightWidth: 1,
-        borderRightColor: '#d4d4d8',
-    },
-    invoiceInfoValueCellWide: {
-        flex: 1,
-        padding: 6,
-        fontSize: 9,
-        borderRightWidth: 0,
-        lineHeight: 1.35,
-    },
-    invoiceItemIdCol: {
-        width: '6%',
-        borderWidth: 1,
-        borderColor: '#000',
-        textAlign: 'center',
-        padding: 4,
-        fontSize: 8,
-        lineHeight: 1.2,
-    },
-    invoiceItemNameCol: {
-        width: '42%',
-        borderWidth: 1,
-        borderColor: '#000',
-        padding: 4,
-        fontSize: 8,
-        lineHeight: 1.25,
-    },
-    invoiceItemQtyCol: {
-        width: '10%',
-        borderWidth: 1,
-        borderColor: '#000',
-        textAlign: 'center',
-        padding: 4,
-        fontSize: 8,
-        lineHeight: 1.2,
-    },
-    invoiceItemPriceCol: {
-        width: '14%',
-        borderWidth: 1,
-        borderColor: '#000',
-        textAlign: 'right',
-        padding: 4,
-        fontSize: 7.5,
-        lineHeight: 1.2,
-    },
-    invoiceItemSubtotalCol: {
-        width: '14%',
-        borderWidth: 1,
-        borderColor: '#000',
-        textAlign: 'right',
-        padding: 4,
-        fontSize: 7.5,
-        lineHeight: 1.2,
-    },
-    invoiceItemTotalCol: {
-        width: '14%',
-        borderWidth: 1,
-        borderColor: '#000',
-        textAlign: 'right',
-        padding: 4,
-        fontSize: 7.5,
-        lineHeight: 1.2,
-    },
-    invoiceTerms: {
-        marginTop: 16,
-        fontSize: 10,
-        lineHeight: 1.4,
-    },
-    invoiceSectionRow: {
-        borderWidth: 1,
-        borderColor: '#000',
-        backgroundColor: '#f3f4f6',
-        paddingHorizontal: 6,
-        paddingVertical: 5,
-    },
-    invoiceSectionText: {
-        fontSize: 8.5,
-        fontWeight: 'bold',
-        textTransform: 'uppercase',
-    },
-    invoiceSubtotalLabelCol: {
-        width: '72%',
-        borderWidth: 1,
-        borderColor: '#000',
-        padding: 4,
-        fontSize: 8,
-        fontWeight: 'bold',
-    },
-    invoiceSubtotalValueCol: {
-        width: '14%',
-        borderWidth: 1,
-        borderColor: '#000',
-        textAlign: 'right',
-        padding: 4,
-        fontSize: 7.5,
-        fontWeight: 'bold',
-        lineHeight: 1.2,
-    },
-    marketingBlock: {
-        marginTop: 12,
-    },
-    marketingPageTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 10,
-        color: '#111827',
-    },
-    marketingIntro: {
-        fontSize: 9.5,
-        lineHeight: 1.4,
-        marginBottom: 6,
-    },
-    marketingItem: {
-        marginBottom: 8,
-    },
-    marketingItemTitle: {
-        fontSize: 9,
-        fontWeight: 'bold',
-        lineHeight: 1.35,
-        marginBottom: 3,
-    },
-    marketingItemDescription: {
-        fontSize: 8.4,
-        lineHeight: 1.4,
-        marginBottom: 3,
-    },
-    marketingBullet: {
-        fontSize: 8.2,
-        lineHeight: 1.42,
-        marginBottom: 2,
-        paddingLeft: 8,
-    },
-});
-
-const marketingServices = [
-    {
-        title: 'Предпроектное консультационное сопровождение',
-        description: 'Данный этап является фундаментом проекта и входит в общую стоимость. Мы обеспечиваем:',
-        bullets: [
-            'Аудит помещений: Технический осмотр локаций под установку оборудования с учетом норм санитарно-эпидемиологического контроля.',
-            'Подбор моделей: Анализ коечного фонда и оборота медикаментов для выбора оптимальной мощности системы (количество кассет и скорость фасовки).',
-            'Планировка и планограмма: Разработка детальных схем размещения оборудования и организация эргономичных рабочих мест для фармацевтов и операторов.',
-        ],
-    },
-    {
-        title: 'Сопровождение НПА и государственных закупок',
-        description: 'Мы берем на себя экспертную поддержку при прохождении бюрократических процедур:',
-        bullets: [
-            'Работа с НПА: Консультации по приведению внутренних регламентов больницы в соответствие с законодательством в области автоматизации лекарственного обеспечения.',
-            'Техническая спецификация: Помощь в формировании грамотного технического задания для процедур госзакупок (ГЗ), исключающего риски поставки некачественного оборудования.',
-            'Юридический контроль: Сопровождение процесса согласования документации на всех этапах тендерного цикла.',
-        ],
-    },
-    {
-        title: 'Установка, монтаж и дополнительная оснастка',
-        description: 'Комплексная реализация «под ключ», включающая:',
-        bullets: [
-            'Инсталляция: Монтаж основного блока JVM и настройка прецизионных узлов.',
-            'Периферийная техника: Поставка и настройка специализированных принтеров этикеток, сканеров штрих-кодов для верификации и терминалов сбора данных.',
-            'Навигация: Установка систем указателей и маркировка зон хранения (планограмма стеллажного хранения).',
-            'Рекомендации: Подбор вспомогательной мебели (антистатические столы, шкафы) и климатического оборудования для серверных узлов.',
-        ],
-    },
-    {
-        title: 'IT-интеграция, документация и обучение',
-        bullets: [
-            'Синхронизация с КИС: Полная интеграция софта JVM с вашей медицинской информационной системой (1С:Медицина, Damumed или аналогами) для обмена данными о назначениях.',
-            'Пакет документов: Передача полных руководств по эксплуатации, технических паспортов и санитарных сертификатов.',
-            'Обучение персонала: Проведение практических тренингов для фармацевтов аптеки и IT-специалистов (администрирование базы данных, замена расходных материалов, регламентное обслуживание).',
-        ],
-    },
-    {
-        title: 'Гарантийное и сервисное обслуживание',
-        bullets: [
-            'Срок: 12 месяцев полной гарантии с момента ввода в эксплуатацию.',
-            'Выездной сервис: В случае неисправности обеспечивается оперативный выезд квалифицированных инженеров, имеющих допуск к обслуживанию высокотехнологичных медицинских систем.',
-            'Поддержка: Удаленная техническая диагностика и обновление ПО.',
-        ],
-    },
-    {
-        title: 'Обучающий визит в Южную Корею',
-        description: 'В рамках долгосрочного партнерства организуется выезд 2-х ведущих специалистов вашей организации (клинического фармаколога / главного врача / руководителя проекта) в Южную Корею:',
-        bullets: [
-            'Посещение завода JVM: Ознакомление с процессом производства и контроля качества.',
-            'Clinical Tour: 3х дневный визит в ведущие клиники Сеула, где системы JVM работают в промышленном масштабе.',
-            'Цель: Обмен опытом по оптимизации логистики внутри больницы и получению максимального экономического эффекта от внедрения.',
-        ],
-    },
-];
-
-const formatAmount = (value: number) => {
-    const normalizedValue = Number.isFinite(value) ? value : 0;
-
-    return normalizedValue
-        .toLocaleString('ru-RU', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        })
-        .replace(/[\u00A0\u202F]/g, ' ');
-};
-
-const InvoicePDF: React.FC<InvoicePDFProps> = ({
-    items,
-    companyDetails,
-    recipient,
-    director,
-    address,
-    phone,
-    originPoint,
-    deliveryPoint,
-    supplyTerms,
-    prepaymentPercent,
-    includeVat,
-    vatRate,
-    invoiceNumber,
-    invoiceDate,
-}) => {
-    const totalWithoutVat = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    const totalVat = includeVat
-        ? totalWithoutVat * vatRate / 100
-        : 0;
-    const totalWithVat = includeVat ? totalWithoutVat + totalVat : totalWithoutVat;
-    const productItems = items.filter((item) => !item.is_service);
-    const serviceItems = items.filter((item) => item.is_service);
-
-    const recipientLines = recipient
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean);
-    const recipientDetails = [
-        director ? `Директор: ${director}` : null,
-        address ? `Адрес: ${address}` : null,
-        phone ? phone : null,
-    ].filter(Boolean) as string[];
-
-    const renderInvoiceSection = (sectionTitle: string, sectionItems: InvoiceItem[], startIndex: number) => {
-        if (sectionItems.length === 0) {
-            return null;
-        }
-
-        const sectionSubtotal = sectionItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-        const sectionTotalWithVat = includeVat
-            ? sectionSubtotal * (1 + vatRate / 100)
-            : sectionSubtotal;
-
-        return (
-            <React.Fragment>
-                <View style={styles.invoiceSectionRow}>
-                    <Text style={styles.invoiceSectionText}>{sectionTitle}</Text>
-                </View>
-                {sectionItems.map((item, index) => {
-                    const lineSubtotal = item.quantity * item.unitPrice;
-                    const lineTotalWithVat = includeVat
-                        ? lineSubtotal * (1 + vatRate / 100)
-                        : lineSubtotal;
-
-                    return (
-                        <View key={item.id} style={styles.tableRow}>
-                            <Text style={styles.invoiceItemIdCol}>{startIndex + index}</Text>
-                            <Text style={styles.invoiceItemNameCol}>{item.name}</Text>
-                            <Text style={styles.invoiceItemQtyCol}>{item.quantity} ед</Text>
-                            <Text style={styles.invoiceItemPriceCol}>
-                                {formatAmount(item.unitPrice)}
-                            </Text>
-                            <Text style={styles.invoiceItemSubtotalCol}>
-                                {formatAmount(lineSubtotal)} KZT
-                            </Text>
-                            <Text style={styles.invoiceItemTotalCol}>
-                                {formatAmount(lineTotalWithVat)} KZT
-                            </Text>
-                        </View>
-                    );
-                })}
-                <View style={styles.tableRow}>
-                    <Text style={styles.invoiceSubtotalLabelCol}>Итого по разделу «{sectionTitle}»</Text>
-                    <Text style={styles.invoiceSubtotalValueCol}>{formatAmount(sectionSubtotal)} KZT</Text>
-                    <Text style={styles.invoiceSubtotalValueCol}>{formatAmount(sectionTotalWithVat)} KZT</Text>
-                </View>
-            </React.Fragment>
-        );
-    };
-
-    return (
-        <Document>
-            <Page size="A4" style={styles.page}>
-                <View style={styles.invoiceHeadingRow}>
-                    <View style={styles.invoiceCompanyBlock}>
-                        <Image style={styles.logo} src="/aster-logo.png" />
-                        <Text>{companyDetails}</Text>
-                    </View>
-                    <View style={styles.invoiceMetaBlock}>
-                        <Text style={styles.invoiceTitle}>ЦЕНОВОЕ ПРЕДЛОЖЕНИЕ</Text>
-                        <Text style={styles.invoiceMetaText}>№ {invoiceNumber}</Text>
-                        <Text style={styles.invoiceMetaText}>Дата: {invoiceDate}</Text>
-                    </View>
-                </View>
-
-                <View style={styles.recipientBox}>
-                    <Text style={styles.recipientLabel}>Кому:</Text>
-                    {recipientLines.map((line, index) => (
-                        <Text key={`${line}-${index}`} style={styles.recipientText}>
-                            {line}
-                        </Text>
-                    ))}
-                    {recipientDetails.map((line, index) => (
-                        <Text key={`${line}-${index}`} style={styles.recipientText}>
-                            {line}
-                        </Text>
-                    ))}
-                </View>
-
-                <View style={styles.invoiceInfoTable}>
-                    <View style={styles.invoiceInfoRow}>
-                        <Text style={styles.invoiceInfoHeaderCell}>Отправитель</Text>
-                        <Text style={styles.invoiceInfoHeaderCell}>Контактный номер</Text>
-                        <Text style={styles.invoiceInfoHeaderCell}>Заказчик</Text>
-                        <Text style={styles.invoiceInfoHeaderCell}>Пункт отправки</Text>
-                        <Text style={styles.invoiceInfoHeaderCell}>Пункт доставки</Text>
-                        <Text style={[styles.invoiceInfoHeaderCell, { borderRightWidth: 0 }]}>Условия поставки</Text>
-                    </View>
-                    <View style={[styles.invoiceInfoRow, { borderBottomWidth: 0 }]}>
-                        <Text style={styles.invoiceInfoValueCell}>JVM Сеул</Text>
-                        <Text style={styles.invoiceInfoValueCell}>Официальный представитель Aster Project</Text>
-                        <Text style={styles.invoiceInfoValueCell}>{recipientLines[0] ?? recipient}</Text>
-                        <Text style={styles.invoiceInfoValueCell}>{originPoint || 'Сеул'}</Text>
-                        <Text style={styles.invoiceInfoValueCell}>{deliveryPoint || 'Алматы'}</Text>
-                        <Text style={[styles.invoiceInfoValueCell, { borderRightWidth: 0 }]}>{supplyTerms || 'EXW '}</Text>
-                    </View>
-                </View>
-
-                <View style={styles.table}>
-                    <View style={styles.tableRow}>
-                        <Text style={[styles.invoiceItemIdCol, styles.tableHeader]}>№</Text>
-                        <Text style={[styles.invoiceItemNameCol, styles.tableHeader]}>Наименование</Text>
-                        <Text style={[styles.invoiceItemQtyCol, styles.tableHeader]}>Кол-во</Text>
-                        <Text style={[styles.invoiceItemPriceCol, styles.tableHeader]}>Цена за ед. (KZT)</Text>
-                        <Text style={[styles.invoiceItemSubtotalCol, styles.tableHeader]}>Сумма без НДС</Text>
-                        <Text style={[styles.invoiceItemTotalCol, styles.tableHeader]}>Сумма с НДС</Text>
-                    </View>
-                    {renderInvoiceSection('Товары', productItems, 1)}
-                    {renderInvoiceSection('Услуги', serviceItems, productItems.length + 1)}
-                </View>
-
-                <View style={styles.summaryBlock}>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>SUBTOTAL</Text>
-                        <Text>{formatAmount(totalWithoutVat)} KZT</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>НДС {includeVat ? `${vatRate}%` : 'не учитывается'}</Text>
-                        <Text>{includeVat ? `${formatAmount(totalVat)} KZT` : '0.00 KZT'}</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Всего</Text>
-                        <Text>{formatAmount(totalWithVat)} KZT</Text>
-                    </View>
-                </View>
-
-                <Text style={styles.invoiceTerms}>Условия оплаты: {(prepaymentPercent || '100').trim()}% предоплата</Text>
-            </Page>
-
-            <Page size="A4" style={styles.page}>
-                <View style={styles.marketingBlock}>
-                    <Text style={styles.marketingPageTitle}>Дополнительные услуги</Text>
-                    {/* <Text style={styles.marketingIntro}>
-                        Для маркетинга. Это наши доп услуги, которые автоматом наши клиенты получают:
-                    </Text> */}
-                    {marketingServices.map((service, index) => (
-                        <View key={service.title} style={styles.marketingItem}>
-                            <Text style={styles.marketingItemTitle}>
-                                {index + 1}. {service.title}
-                            </Text>
-                            {service.description ? (
-                                <Text style={styles.marketingItemDescription}>{service.description}</Text>
-                            ) : null}
-                            {service.bullets.map((bullet) => (
-                                <Text key={bullet} style={styles.marketingBullet}>
-                                    • {bullet}
-                                </Text>
-                            ))}
-                        </View>
-                    ))}
-                </View>
-            </Page>
-        </Document>
-    );
-};
 
 // Главный компонент Dashboard
 export default function Dashboard() {
@@ -629,6 +80,13 @@ export default function Dashboard() {
     const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
     const [isInvoiceGenerating, setIsInvoiceGenerating] = useState<boolean>(false);
     const [pdfError, setPdfError] = useState<string>('');
+    const [clients, setClients] = useState<ClientOption[]>([]);
+    const [selectedClientId, setSelectedClientId] = useState<string>('');
+    const [nextOfferNumber, setNextOfferNumber] = useState<string>('');
+    const [isSavingOffer, setIsSavingOffer] = useState<boolean>(false);
+    const [saveMessage, setSaveMessage] = useState<string>('');
+    const [savedOfferId, setSavedOfferId] = useState<number | null>(null);
+    const [canSaveOffer, setCanSaveOffer] = useState<boolean>(false);
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -659,9 +117,23 @@ export default function Dashboard() {
             }
         };
 
+        // Клиенты для подстановки получателя и следующий свободный номер предложения
+        const fetchOfferFormOptions = async () => {
+            try {
+                const response = await axios.get<{ next_number: string; clients: ClientOption[] }>('/price-offers/form-options');
+                setClients(response.data.clients);
+                setNextOfferNumber(response.data.next_number);
+                setCanSaveOffer(true);
+            } catch (error) {
+                // У консультантов нет доступа к журналу — прайс просто скачивается без сохранения
+                console.error('Ошибка при получении данных для ценового предложения:', error);
+            }
+        };
+
         fetchProducts();
         fetchExchangeRateUSD();
         fetchCompanyDetails();
+        fetchOfferFormOptions();
     }, []);
 
     const filteredProducts = products.filter((product) => selectedProducts.includes(product.id));
@@ -686,11 +158,13 @@ export default function Dashboard() {
 
         if (open) {
             setPdfError('');
+            setSaveMessage('');
+            setSavedOfferId(null);
         }
 
-        if (open && !invoiceNumber) {
-            const generatedNumber = `${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-            setInvoiceNumber(generatedNumber);
+        // Номер всегда берётся свободный — прошлый мог уже уйти в журнал
+        if (open) {
+            setInvoiceNumber(nextOfferNumber || `${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`);
         }
 
         if (open) {
@@ -728,36 +202,138 @@ export default function Dashboard() {
         );
     };
 
-    const handleInvoiceDownload = async () => {
-        if (filteredProducts.length === 0 || !invoiceRecipient.trim() || invoiceItems.length === 0) {
+    // Подстановка реквизитов получателя из «Клиентской базы»
+    const handleClientSelect = (clientId: string) => {
+        setSelectedClientId(clientId);
+
+        const client = clients.find((candidate) => String(candidate.id) === clientId);
+
+        if (!client) {
+            return;
+        }
+
+        setInvoiceRecipient(client.company_name);
+        setInvoiceDirector(client.contact_name ?? '');
+        setInvoiceAddress(client.address ?? '');
+        setInvoicePhone(client.phone ?? '');
+    };
+
+    const isOfferReady = filteredProducts.length > 0 && invoiceRecipient.trim().length > 0 && invoiceItems.length > 0;
+
+    const currentOfferNumber = invoiceNumber || `${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+
+    const buildPdfProps = () => ({
+        items: invoiceItems,
+        companyDetails,
+        recipient: invoiceRecipient,
+        director: invoiceDirector,
+        address: invoiceAddress,
+        phone: invoicePhone,
+        originPoint: invoiceOriginPoint,
+        deliveryPoint: invoiceDeliveryPoint,
+        supplyTerms: invoiceSupplyTerms,
+        prepaymentPercent: invoicePrepaymentPercent,
+        includeVat: invoiceIncludeVat,
+        vatRate,
+        invoiceNumber: currentOfferNumber,
+        invoiceDate: new Date().toLocaleDateString('ru-RU'),
+    });
+
+    // Запись предложения в журнал ценовых предложений
+    const saveOfferToJournal = async () => {
+        const response = await axios.post('/price-offers', {
+            number: currentOfferNumber,
+            offer_date: new Date().toISOString().slice(0, 10),
+            client_id: selectedClientId ? Number(selectedClientId) : null,
+            recipient: invoiceRecipient,
+            director: invoiceDirector || null,
+            address: invoiceAddress || null,
+            phone: invoicePhone || null,
+            origin_point: invoiceOriginPoint || null,
+            delivery_point: invoiceDeliveryPoint || null,
+            supply_terms: invoiceSupplyTerms || null,
+            prepayment_percent: Number(invoicePrepaymentPercent) || 0,
+            include_vat: invoiceIncludeVat,
+            vat_rate: vatRate,
+            exchange_rate_usd: exchangeRateUSD,
+            status: 'draft',
+            items: invoiceItems.map((item) => ({
+                product_id: item.id,
+                name: item.name,
+                is_service: item.is_service,
+                quantity: item.quantity,
+                unit_price: item.unitPrice,
+            })),
+        });
+
+        const offer = response.data.offer as { id: number; number: string };
+        setSavedOfferId(offer.id);
+
+        // Готовим свободный номер для следующего предложения
+        axios
+            .get<{ next_number: string; clients: ClientOption[] }>('/price-offers/form-options')
+            .then((options) => setNextOfferNumber(options.data.next_number))
+            .catch((error) => console.error('Ошибка при получении номера следующего предложения:', error));
+
+        return offer;
+    };
+
+    const extractErrorMessage = (error: unknown, fallback: string) => {
+        if (axios.isAxiosError(error)) {
+            const data = error.response?.data as { message?: string; errors?: Record<string, string[]> } | undefined;
+            const firstFieldError = data?.errors ? Object.values(data.errors)[0]?.[0] : undefined;
+
+            return firstFieldError ?? data?.message ?? fallback;
+        }
+
+        return fallback;
+    };
+
+    const handleSaveOffer = async () => {
+        if (!isOfferReady || savedOfferId !== null || !canSaveOffer) {
             return;
         }
 
         setPdfError('');
+        setSaveMessage('');
+        setIsSavingOffer(true);
+
+        try {
+            const offer = await saveOfferToJournal();
+            setSaveMessage(`Предложение № ${offer.number} сохранено в журнал.`);
+        } catch (error) {
+            console.error('Ошибка при сохранении ценового предложения:', error);
+            setPdfError(extractErrorMessage(error, 'Не удалось сохранить предложение в журнал.'));
+        } finally {
+            setIsSavingOffer(false);
+        }
+    };
+
+    const handleInvoiceDownload = async () => {
+        if (!isOfferReady) {
+            return;
+        }
+
+        setPdfError('');
+        setSaveMessage('');
         setIsInvoiceGenerating(true);
 
         try {
-            const invoiceDate = new Date().toLocaleDateString('ru-RU');
-            const blob = await pdf(
-                <InvoicePDF
-                    items={invoiceItems}
-                    companyDetails={companyDetails}
-                    recipient={invoiceRecipient}
-                    director={invoiceDirector}
-                    address={invoiceAddress}
-                    phone={invoicePhone}
-                    originPoint={invoiceOriginPoint}
-                    deliveryPoint={invoiceDeliveryPoint}
-                    supplyTerms={invoiceSupplyTerms}
-                    prepaymentPercent={invoicePrepaymentPercent}
-                    includeVat={invoiceIncludeVat}
-                    vatRate={vatRate}
-                    invoiceNumber={invoiceNumber || `${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`}
-                    invoiceDate={invoiceDate}
-                />,
-            ).toBlob();
+            const blob = await buildPriceOfferPdfBlob(buildPdfProps());
 
             saveAs(blob, `Invoice_${invoiceNumber || 'draft'}.pdf`);
+
+            // Каждое выгруженное предложение попадает в журнал — но только один раз
+            if (canSaveOffer && savedOfferId === null) {
+                try {
+                    await saveOfferToJournal();
+                } catch (error) {
+                    console.error('Ошибка при сохранении ценового предложения:', error);
+                    setPdfError(extractErrorMessage(error, 'PDF скачан, но предложение не удалось сохранить в журнал.'));
+                    return;
+                }
+            }
+
             setIsInvoiceDialogOpen(false);
         } catch (error) {
             console.error('Ошибка при формировании ценового предложения:', error);
@@ -797,6 +373,11 @@ export default function Dashboard() {
                                 >
                                     Ценовое предложение
                                 </Button>
+                                {canSaveOffer ? (
+                                    <Button asChild type="button" variant="outline">
+                                        <Link href="/price-offers">Журнал предложений</Link>
+                                    </Button>
+                                ) : null}
                             </div>
                         </div>
                         <DataGrid
@@ -835,6 +416,26 @@ export default function Dashboard() {
                                 onChange={(event) => setInvoiceNumber(event.target.value)}
                                 placeholder="Например, 2026-000123"
                             />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="invoice-client">Клиент из базы</Label>
+                            <select
+                                id="invoice-client"
+                                value={selectedClientId}
+                                onChange={(event) => handleClientSelect(event.target.value)}
+                                className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+                            >
+                                <option value="">Не выбран — заполнить вручную</option>
+                                {clients.map((client) => (
+                                    <option key={client.id} value={client.id}>
+                                        {client.company_name} ({client.division.toUpperCase()})
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-muted-foreground">
+                                Выбор клиента подставит реквизиты ниже — их можно поправить вручную.
+                            </p>
                         </div>
 
                         <div className="space-y-2">
@@ -1004,17 +605,38 @@ export default function Dashboard() {
                             </p>
                         ) : null}
 
+                        {saveMessage ? (
+                            <p className="mt-3 text-sm text-emerald-600" role="status">
+                                {saveMessage}
+                            </p>
+                        ) : null}
+
                         <DialogFooter className="mt-4 shrink-0 border-t bg-background pt-4 sm:justify-end">
                             <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => handleInvoiceDialogOpen(false)}>
                                 Отмена
                             </Button>
+                            {canSaveOffer ? (
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="w-full sm:w-auto"
+                                    onClick={handleSaveOffer}
+                                    disabled={!isOfferReady || isSavingOffer || isInvoiceGenerating || savedOfferId !== null}
+                                >
+                                    {savedOfferId !== null ? 'Сохранено' : isSavingOffer ? 'Сохранение...' : 'Сохранить в журнал'}
+                                </Button>
+                            ) : null}
                             <Button
                                 type="button"
                                 className="w-full sm:w-auto"
                                 onClick={handleInvoiceDownload}
-                                disabled={filteredProducts.length === 0 || !invoiceRecipient.trim() || isInvoiceGenerating}
+                                disabled={!isOfferReady || isInvoiceGenerating || isSavingOffer}
                             >
-                                {isInvoiceGenerating ? 'Формирование...' : 'Скачать PDF'}
+                                {isInvoiceGenerating
+                                    ? 'Формирование...'
+                                    : canSaveOffer && savedOfferId === null
+                                      ? 'Сохранить и скачать PDF'
+                                      : 'Скачать PDF'}
                             </Button>
                         </DialogFooter>
                     </div>

@@ -178,4 +178,45 @@ export interface DivisionTaskRecord extends Omit<TaskRecord, 'project_id' | 'pro
     project: TaskRecord['project'] | null;
 }
 
+export type PriceOfferStatus = 'draft' | 'sent' | 'accepted' | 'rejected';
+
+export interface PriceOfferItemRecord {
+    id: number;
+    product_id: number | null;
+    name: string;
+    is_service: boolean;
+    quantity: string;
+    unit_price: string;
+    sort_order: number;
+}
+
+export interface PriceOfferRecord {
+    id: number;
+    number: string;
+    offer_date: string;
+    client_id: number | null;
+    client?: Pick<ClientRecord, 'id' | 'company_name' | 'division'> | null;
+    recipient: string;
+    director: string | null;
+    address: string | null;
+    phone: string | null;
+    origin_point: string | null;
+    delivery_point: string | null;
+    supply_terms: string | null;
+    prepayment_percent: number;
+    include_vat: boolean;
+    vat_rate: string;
+    exchange_rate_usd: string | null;
+    subtotal: string;
+    vat_amount: string;
+    total: string;
+    status: PriceOfferStatus;
+    notes: string | null;
+    copied_from_id: number | null;
+    copied_from?: { id: number; number: string } | null;
+    creator?: UserSummary | null;
+    items: PriceOfferItemRecord[];
+    created_at: string;
+}
+
 export type FormErrors = Record<string, string>;

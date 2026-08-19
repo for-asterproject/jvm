@@ -4,7 +4,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, CalendarDays, CircleDollarSign, Contact, FileSliders, Folder, LayoutGrid, ListTodo, ShieldCheck } from 'lucide-react';
+import { BookOpen, CalendarDays, CircleDollarSign, Contact, FileSliders, FileText, Folder, LayoutGrid, ListTodo, ShieldCheck } from 'lucide-react';
 import AppLogo from './app-logo';
 
 // Навигация нижнего меню
@@ -33,6 +33,7 @@ export function AppSidebar() {
         ...(permissions?.isAdministrator ? [{ title: 'Админ панель', href: '/adminpanel', icon: ShieldCheck, role: 'Администратор' }] : []),
         ...(roles.includes('Бухгалтер') ? [{ title: 'Бухгалтерия', href: '/productsmanagment', icon: CircleDollarSign, role: 'Бухгалтер' }] : []),
         { title: 'Прайс Лист', href: '/dashboard', icon: LayoutGrid, role: '' },
+        ...(permissions?.isStaff ? [{ title: 'Ценовые предложения', href: '/price-offers', icon: FileText, role: '' }] : []),
         ...(permissions?.hasCrmAccess
             ? [
                   { title: 'Презентации', href: '/presentations', icon: FileSliders, role: '' },

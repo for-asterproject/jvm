@@ -6,6 +6,7 @@ use App\Http\Controllers\ExchangeRateController;
 use App\Http\Controllers\PresentationAttachmentController;
 use App\Http\Controllers\PresentationController;
 use App\Http\Controllers\PresentationUploadController;
+use App\Http\Controllers\PriceOfferController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\RoleController;
@@ -66,6 +67,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/presentations/{presentation}/uploads/{attachment}/chunks/{chunkIndex}', [PresentationUploadController::class, 'storeChunk'])->whereNumber('chunkIndex')->name('presentations.uploads.chunks.store');
     Route::post('/presentations/{presentation}/uploads/{attachment}/complete', [PresentationUploadController::class, 'complete'])->name('presentations.uploads.complete');
     Route::delete('/presentations/{presentation}/uploads/{attachment}', [PresentationUploadController::class, 'abort'])->name('presentations.uploads.abort');
+
+    Route::get('/price-offers', [PriceOfferController::class, 'index'])->name('price-offers.index'); // журнал ценовых предложений
+    Route::get('/price-offers/form-options', [PriceOfferController::class, 'formOptions'])->name('price-offers.form-options'); // номер и клиенты для формы
+    Route::post('/price-offers', [PriceOfferController::class, 'store'])->name('price-offers.store');
+    Route::put('/price-offers/{priceOffer}', [PriceOfferController::class, 'update'])->name('price-offers.update');
+    Route::post('/price-offers/{priceOffer}/duplicate', [PriceOfferController::class, 'duplicate'])->name('price-offers.duplicate'); // копия для другого клиента
+    Route::delete('/price-offers/{priceOffer}', [PriceOfferController::class, 'destroy'])->name('price-offers.destroy');
 
     Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');
     Route::post('/clients', [ClientController::class, 'store'])->name('clients.store');
