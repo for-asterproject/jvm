@@ -110,6 +110,83 @@ class PriceOfferTest extends TestCase
         $this->assertSame($firstClient->id, $source->fresh()->client_id);
     }
 
+    public function test_saved_offer_can_be_edited_from_the_journal(): void
+    {
+        $employee = $this->userWithRole('Сотрудник');
+        $client = $this->client('Новый получатель');
+
+        $this->actingAs($employee)->postJson('/price-offers', $this->offerPayload([
+            'items' => [
+                ['product_id' => null, 'name' => 'Аппарат JVM', 'is_service' => false, 'quantity' => 1, 'unit_price' => 1000],
+                ['product_id' => null, 'name' => 'Лишняя позиция', 'is_service' => false, 'quantity' => 1, 'unit_price' => 400],
+            ],
+        ]))->assertCreated();
+
+        $offer = PriceOffer::firstOrFail();
+
+        // Меняем получателя, статус и состав позиций: одну правим, одну удаляем, одну добавляем
+        $this->actingAs($employee)->put("/price-offers/{$offer->id}", $this->offerPayload([
+            'number' => $offer->number,
+            'client_id' => $client->id,
+            'recipient' => 'Новый получатель',
+            'status' => 'sent',
+            'prepayment_percent' => 50,
+            'items' => [
+                ['product_id' => null, 'name' => 'Аппарат JVM (обновлён)', 'is_service' => false, 'quantity' => 2, 'unit_price' => 1500],
+                ['product_id' => null, 'name' => 'Монтаж', 'is_service' => true, 'quantity' => 1, 'unit_price' => 500],
+            ],
+        ]))->assertRedirect();
+
+        $offer->refresh()->load('items');
+
+        $this->assertSame('Новый получатель', $offer->recipient);
+        $this->assertSame($client->id, $offer->client_id);
+        $this->assertSame('sent', $offer->status);
+        $this->assertSame(50, $offer->prepayment_percent);
+
+        // Старые позиции заменены новыми, итоги пересчитаны: 2 × 1500 + 500 = 3500, НДС 12% = 420
+        $this->assertCount(2, $offer->items);
+        $this->assertSame(['Аппарат JVM (обновлён)', 'Монтаж'], $offer->items->pluck('name')->all());
+        $this->assertTrue($offer->items->last()->is_service);
+        $this->assertSame('3500.00', $offer->subtotal);
+        $this->assertSame('420.00', $offer->vat_amount);
+        $this->assertSame('3920.00', $offer->total);
+    }
+
+    public function test_editing_keeps_fields_the_form_does_not_send(): void
+    {
+        $employee = $this->userWithRole('Сотрудник');
+
+        $this->actingAs($employee)->postJson('/price-offers', $this->offerPayload())->assertCreated();
+
+        $offer = PriceOffer::firstOrFail();
+        $this->assertSame('520.5000', $offer->exchange_rate_usd);
+
+        $payload = $this->offerPayload(['number' => $offer->number, 'recipient' => 'Тот же получатель']);
+        unset($payload['exchange_rate_usd']);
+
+        $this->actingAs($employee)->put("/price-offers/{$offer->id}", $payload)->assertRedirect();
+
+        // Курс, зафиксированный при выпуске, не должен обнуляться при редактировании
+        $this->assertSame('520.5000', $offer->refresh()->exchange_rate_usd);
+    }
+
+    public function test_editing_rejects_an_offer_without_items(): void
+    {
+        $employee = $this->userWithRole('Сотрудник');
+
+        $this->actingAs($employee)->postJson('/price-offers', $this->offerPayload())->assertCreated();
+
+        $offer = PriceOffer::firstOrFail();
+
+        $this->actingAs($employee)
+            ->putJson("/price-offers/{$offer->id}", $this->offerPayload(['number' => $offer->number, 'items' => []]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('items');
+
+        $this->assertCount(1, $offer->refresh()->items);
+    }
+
     public function test_journal_lists_saved_offers(): void
     {
         $employee = $this->userWithRole('Сотрудник');

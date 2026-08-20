@@ -79,7 +79,7 @@ class PriceOfferController extends Controller
 
         DB::transaction(function () use ($data, $priceOffer) {
             $priceOffer->update([
-                ...$this->offerAttributes($data),
+                ...$this->offerAttributes($data, $priceOffer),
                 'number' => ($data['number'] ?? null) ?: $priceOffer->number,
             ]);
 
@@ -162,27 +162,34 @@ class PriceOfferController extends Controller
     /**
      * Общие атрибуты предложения из проверенных данных формы.
      *
+     * Поля, которых нет в запросе, при редактировании сохраняют текущее значение —
+     * форма журнала не присылает, например, курс USD, зафиксированный при выпуске.
+     *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function offerAttributes(array $data): array
+    private function offerAttributes(array $data, ?PriceOffer $current = null): array
     {
+        $value = fn (string $key, mixed $default) => array_key_exists($key, $data)
+            ? $data[$key]
+            : ($current?->getAttribute($key) ?? $default);
+
         return [
-            'offer_date' => $data['offer_date'] ?? now()->toDateString(),
-            'client_id' => $data['client_id'] ?? null,
+            'offer_date' => $value('offer_date', now()->toDateString()),
+            'client_id' => $value('client_id', null),
             'recipient' => $data['recipient'],
-            'director' => $data['director'] ?? null,
-            'address' => $data['address'] ?? null,
-            'phone' => $data['phone'] ?? null,
-            'origin_point' => $data['origin_point'] ?? null,
-            'delivery_point' => $data['delivery_point'] ?? null,
-            'supply_terms' => $data['supply_terms'] ?? null,
-            'prepayment_percent' => $data['prepayment_percent'] ?? 100,
-            'include_vat' => $data['include_vat'] ?? true,
-            'vat_rate' => $data['vat_rate'] ?? 0,
-            'exchange_rate_usd' => $data['exchange_rate_usd'] ?? null,
-            'status' => $data['status'] ?? 'draft',
-            'notes' => $data['notes'] ?? null,
+            'director' => $value('director', null),
+            'address' => $value('address', null),
+            'phone' => $value('phone', null),
+            'origin_point' => $value('origin_point', null),
+            'delivery_point' => $value('delivery_point', null),
+            'supply_terms' => $value('supply_terms', null),
+            'prepayment_percent' => $value('prepayment_percent', 100),
+            'include_vat' => $value('include_vat', true),
+            'vat_rate' => $value('vat_rate', 0),
+            'exchange_rate_usd' => $value('exchange_rate_usd', null),
+            'status' => $value('status', 'draft'),
+            'notes' => $value('notes', null),
         ];
     }
 
